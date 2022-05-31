@@ -1,5 +1,106 @@
-body {
+body, div {
     margin: 0 !important;
-    padding: 0 !important;
     font-family: Arial, sans-serif;
+    position: fixed;
+}
+
+canvas {
+    cursor: crosshair;
+}
+
+div {
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+#sidebar {
+    right: 0;
+    top: 0;
+    width: 30%;
+    height: 100%;
+}
+
+#navigation {
+    left: 0;
+    bottom: 0;
+    width: 70%;
+    height: 80px;
+}
+
+.button,
+.selectable-button label,
+.selectable-button input {
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    display: flex;
+    border: 1px solid black;
+    margin: 0;
+    z-index: 1;
+    padding: 0;
+    background: #E6E6EA;
+    transition-duration: 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
+    /* Apparently some elements have box-sizing of border-box by default... why must backwards compatibility be such a pain to debug */
+    box-sizing: content-box;
+}
+
+.selectable-button input[type="radio"],
+.selectable-button input[type="checkbox"] {
+    display: none;
+}
+
+.button:hover,
+.selectable-button label:hover,
+.button-text {
+    padding: 2px;
+    z-index: 1;
+    border: 1px solid white;
+}
+
+.selectable-button input[type="radio"]:checked + label,
+.selectable-button input[type="checkbox"]:checked + label {
+    background: #CDCDD6;
+}
+
+
+.square-button,
+.square label,
+.square input {
+    width: 50px;
+    height: 50px;
+    cursor: pointer;
+}
+
+#b1a {
+    bottom: 15px;
+    left: 15px;
+}
+#b1b {
+    bottom: 15px;
+    left: 80px;
+}
+#b1c {
+    bottom: 15px;
+    left: 145px;
+}
+#b2a {
+    bottom: 15px;
+    left: 210px;
+}
+#b2b {
+    bottom: 15px;
+    left: 275px;
+}
+#b3a {
+    bottom: 15px;
+    left: 340px;
+}
+#b3b {
+    bottom: 15px;
+    left: 405px;
 }
