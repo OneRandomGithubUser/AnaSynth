@@ -1,0 +1,1 @@
+em++ AnaSynth.cpp -o AnaSynth.js -sEXPORTED_FUNCTIONS=_main,_SelectPage -sNO_EXIT_RUNTIME=1 -sUSE_BOOST_HEADERS=1 -std=c++20 -lembind -g -sNO_DISABLE_EXCEPTION_CATCHING  
