@@ -19,18 +19,19 @@ bool circuitCompleted = false;
 
 namespace audio
 {
-  static emscripten::val globalAudioContext = emscripten::val::global("AudioContext");
-  static std::vector<emscripten::val> oscillators;
+  emscripten::val globalAudioContext = emscripten::val::global("AudioContext");
+  std::vector<emscripten::val> oscillators;
   // audioContext is allowed to start only after user interactions, so this must only be created when initialized
-  static std::optional<emscripten::val> audioContext;
-  static std::optional<emscripten::val> gainNode;
-  static std::optional<emscripten::val> volumeManager;
-  static double TIME_CONSTANT = 1.5; // in seconds
-  static double beginTime = 0.0;
-  static bool initialized = false;
-  static bool playing = false;
-  static double initialVolume = 1.5;
-  static int timeConstants = 0;
+  std::optional<emscripten::val> audioContext;
+  std::optional<emscripten::val> gainNode;
+  std::optional<emscripten::val> volumeManager;
+  double TIME_CONSTANT = 1.5; // in seconds
+  double beginTime = 0.0;
+  bool initialized = false;
+  bool playing = false;
+  double initialVolume = 0.5;
+  int timeConstants = 0;
+  std::vector<double> _frequencies;
   /*
   class rlc
   {
@@ -69,6 +70,61 @@ namespace audio
       }
     }
   };*/
+  void set_frequencies(std::vector<double>& frequencies)
+  {
+    if (initialized)
+    {
+      // This part can be called ONLY after audio::initialize() is called
+      // emscripten currently does not have much support for throwing std::exception
+      for (auto &oscillator: oscillators)
+      {
+        oscillator.call<void>("stop");
+        oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+      }
+      oscillators.clear();
+      for (auto &frequency: frequencies) {
+        emscripten::val oscillator = audioContext.value().call<emscripten::val>("createOscillator");
+        oscillator.set("type", emscripten::val("sine"));
+        oscillator["frequency"].set("value", emscripten::val(frequency));
+        oscillators.emplace_back(oscillator);
+      }
+      // connect oscillators to audio output
+      for (auto &oscillator: oscillators) {
+        oscillator.call<void>("connect", gainNode.value());
+      }
+      // start the oscillators together
+      for (auto &oscillator: oscillators) {
+        oscillator.call<void>("start");
+      }
+    }
+    _frequencies = frequencies;
+  }
+  void set_initial_volume(double startingVolume)
+  {
+    initialVolume = startingVolume;
+  }
+  void set_time_constant(double timeConstant)
+  {
+    TIME_CONSTANT = timeConstant;
+  }
+  void set_vars(std::vector<double>& frequencies, double startingVolume, double timeConstant)
+  {
+    set_frequencies(frequencies);
+    set_initial_volume(startingVolume);
+    set_time_constant(timeConstant);
+  }
+  std::vector<double>& get_frequencies()
+  {
+    return _frequencies;
+  }
+  double get_initial_volume()
+  {
+    return initialVolume;
+  }
+  double get_time_constant()
+  {
+    return TIME_CONSTANT;
+  }
   void initialize()
   {
     // because you cannot create audioContext until user interaction with the page, a rule enforced by browsers
@@ -78,39 +134,9 @@ namespace audio
       audioContext.emplace(baseAudioContext);
       gainNode.emplace(audioContext.value().call<emscripten::val>("createGain"));
       gainNode.value().call<void>("connect", audioContext.value()["destination"]); // connect gainNode to audio output
+      initialized = true;
+      set_frequencies(_frequencies);
     }
-    initialized = true;
-  }
-  void set_vars(std::vector<double>& frequencies, double startingVolume, double timeConstant)
-  {
-    if (!initialized)
-    {
-      // This function can be called ONLY after audio::initialize() is called
-      // emscripten currently does not have much support for throwing std::exception
-      std::cout << "Error: audio::set_vars() called before audio::initialize()\n";
-    }
-    for (auto &oscillator: oscillators)
-    {
-      oscillator.call<void>("stop");
-      oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
-    }
-    oscillators.clear();
-    for (auto &frequency: frequencies) {
-      emscripten::val oscillator = audioContext.value().call<emscripten::val>("createOscillator");
-      oscillator.set("type", emscripten::val("sine"));
-      oscillator["frequency"].set("value", emscripten::val(frequency));
-      oscillators.emplace_back(oscillator);
-    }
-    // connect oscillators to audio output
-    for (auto &oscillator: oscillators) {
-      oscillator.call<void>("connect", gainNode.value());
-    }
-    // start the oscillators together
-    for (auto &oscillator: oscillators) {
-      oscillator.call<void>("start");
-    }
-    initialVolume = startingVolume;
-    TIME_CONSTANT = timeConstant;
   }
   void volume_control()
   {
@@ -176,8 +202,6 @@ namespace audio
 void PlayOrPauseSound(emscripten::val event)
 {
   audio::initialize();
-  std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
-  audio::set_vars(frequencies, 0.5, 1.5);
   audio::play_or_pause();
 }
 
@@ -721,7 +745,7 @@ void InitializePage(int i)
       addParagraph(info, "Now, we give you the freedom to manipulate the statistics of the speaker.");
       addParagraph(info, "A very efficient speaker has an efficiency of about 0.3%.");
       addParagraph(info,
-                   "that manipulating the values of the speaker may cause values entered in previously to become invalid.");
+                   "Note that manipulating the values of the speaker may cause values entered in previously to become invalid.");
       addLabel(info, "rValue", "R = ", "left-label");
       info.call<emscripten::val>("appendChild", rValue);
       addLabel(info, "rValue", "&#8486");
@@ -747,40 +771,51 @@ void InitializePage(int i)
 void RenderSidebar()
 {
   static bool nextButtonEnabled = false;
-  switch(page)
-  {
-    case(0):
+  switch(page) {
+    case (0):
       break;
-    case(1):
-    {
+    case (1): {
       emscripten::val inductor = document.call<emscripten::val>("getElementById", emscripten::val("lValue"));
       emscripten::val resistor = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val tConstant = document.call<emscripten::val>("getElementById", emscripten::val("tValue"));
       double tV = 0;
       resistor.set("value", emscripten::val(4));
-      if(inductor["value"].as<std::string>() != "" && resistor["value"].as<std::string>() != "") {
+      if (inductor["value"].as<std::string>() != "" && resistor["value"].as<std::string>() != "") {
         tV = 2 * stod(inductor["value"].as<std::string>()) / stod(resistor["value"].as<std::string>());
-        if (std::isinf(tV))
-        {
+        if (std::isinf(tV)) {
           tConstant.set("value", emscripten::val("Infinity"));
         } else {
           tConstant.set("value", emscripten::val(tV));
         }
       }
-      
+
       emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
       emscripten::val next = document.call<emscripten::val>("getElementById", emscripten::val("next"));
-      if(next == emscripten::val::null()) {
-        addNextButton(sidebar);
-        if (tV > 1 && !nextButtonEnabled) {
-          std::cout << tV << " 1\n";
-          enableNextButton();
-          nextButtonEnabled = true;
-        } else if (tV < 1 && nextButtonEnabled) {
-          std::cout << tV << " 2\n";
-          disableNextButton();
-          nextButtonEnabled = false;
-        }
+      if (tV > 1 && !nextButtonEnabled) {
+        std::cout << tV << " 1\n";
+        enableNextButton();
+        nextButtonEnabled = true;
+        audio::set_time_constant(tV);
+      } else if (tV < 1 && nextButtonEnabled) {
+        std::cout << tV << " 2\n";
+        disableNextButton();
+        nextButtonEnabled = false;
+      }
+      break;
+    }
+    case 3:
+    {
+      std::vector<double> frequencies{-1};
+      if (false) {
+        audio::set_frequencies(frequencies);
+      }
+      break;
+    }
+    case 5:
+    {
+      double initialVolume = -1;
+      if (false) {
+        audio::set_initial_volume(initialVolume);
       }
       break;
     }
@@ -798,6 +833,8 @@ void Render()
   RenderSidebar();
 }
 
+void StoreData(int page); // forward declaration
+
 extern "C"
 {
 EMSCRIPTEN_KEEPALIVE
@@ -805,12 +842,71 @@ void SelectPage(int i)
 {
   page = i;
   InitializePage(page);
+  StoreData(page);
 }
 void NextPage(emscripten::val event)
 {
   page++;
   InitializePage(page);
+  StoreData(page);
 }
+}
+
+void StoreData(int page)
+{
+  emscripten::val localStorage = emscripten::val::global("localStorage");
+  localStorage.call<void>("setItem", emscripten::val("selectedPage"), emscripten::val(page));
+  localStorage.call<void>("setItem", emscripten::val("timeConstant"), emscripten::val(audio::get_time_constant()));
+  localStorage.call<void>("setItem", emscripten::val("initialVolume"), emscripten::val(audio::get_initial_volume()));
+  std::string temp = "";
+  for (auto& frequency : audio::get_frequencies())
+  {
+    temp += std::to_string(frequency);
+    temp += ",";
+  }
+  localStorage.call<void>("setItem", emscripten::val("frequencies"), emscripten::val(temp));
+}
+
+void RetrieveData()
+{
+  emscripten::val localStorage = emscripten::val::global("localStorage");
+  emscripten::val pageNumber = localStorage.call<emscripten::val>("getItem", emscripten::val("selectedPage"));
+  emscripten::val timeConstant = localStorage.call<emscripten::val>("getItem", emscripten::val("timeConstant"));
+  emscripten::val initialVolume = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume"));
+  emscripten::val frequencies = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume"));
+  // checks if there is such a stored value: typeOf will be "object" when the emscripten::val is null
+  if (pageNumber.typeOf().as<std::string>() == "string") {
+    SelectPage(std::stoi(pageNumber.as<std::string>()));
+  } else {
+    SelectPage(0);
+  }
+  if (timeConstant.typeOf().as<std::string>() == "string") {
+    audio::set_time_constant(std::stod(timeConstant.as<std::string>()));
+  } else {
+    audio::set_time_constant(1.5);
+  }
+  if (timeConstant.typeOf().as<std::string>() == "string") {
+    audio::set_initial_volume(std::stod(timeConstant.as<std::string>()));
+  } else {
+    audio::set_initial_volume(0.5);
+  }
+  if (frequencies.typeOf().as<std::string>() == "string") {
+    std::string frequenciesString = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume")).as<std::string>();
+    std::vector<double> temp;
+    while (frequenciesString != "")
+    {
+      int pos = frequenciesString.find(",");
+      if (pos == std::string::npos) {break;}
+      std::cout << frequenciesString << " " << frequenciesString.substr(0, pos) << " " << frequenciesString.substr(pos) << " " << frequenciesString.substr(pos+1) << "\n";
+      temp.push_back(std::stod(frequenciesString.substr(0, pos)));
+      frequenciesString = frequenciesString.substr(pos+1);
+    }
+    audio::set_frequencies(temp);
+  } else {
+    std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
+    audio::set_frequencies(frequencies);
+  }
+  StoreData(page);
 }
 
 int main() {
@@ -834,6 +930,7 @@ int main() {
   ctx.set("font", emscripten::val("20px Arial"));
   document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
   document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
+  RetrieveData();
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
