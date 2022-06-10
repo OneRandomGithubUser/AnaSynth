@@ -927,6 +927,10 @@ void RenderSidebar()
   }
 }
 
+void CloseIntro(emscripten::val event) {
+  document.call<emscripten::val>("getElementById", emscripten::val("blur")).call<void>("remove", emscripten::val("mouseup"));
+}
+
 void Render()
 {
   RenderCanvas();
@@ -1026,6 +1030,7 @@ int main() {
   ctx.set("font", emscripten::val("20px Arial"));
   document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
   document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
+  document.call<emscripten::val>("getElementById", emscripten::val("intro-button")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("CloseIntro"));
   RetrieveData();
   StoreData(page);
 
@@ -1043,4 +1048,5 @@ EMSCRIPTEN_BINDINGS(bindings)
   emscripten::function("NextPage", NextPage);
   emscripten::function("VolumeControl", audio::volume_control);
   emscripten::function("PlayOrPauseSound", PlayOrPauseSound);
+  emscripten::function("CloseIntro", CloseIntro);
 }

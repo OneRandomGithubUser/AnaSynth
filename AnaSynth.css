@@ -24,6 +24,34 @@ label {
     margin-left: 5px;
 }
 
+#blur {
+    padding: 0;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    backdrop-filter: blur(8px);
+    z-index: 100;
+}
+
+#popup {
+    left: 30%;
+    right: 30%;
+    top: 30%;
+    bottom: 30%;
+    display: block;
+    text-align: center;
+    align-items: center;
+    justify-content: center;
+    background: white;
+    box-shadow: 2px 2px 5px black;
+}
+
+#intro-button {
+    display: initial;
+    position: initial;
+}
+
 #sidebar {
     right: 0;
     top: 0;
@@ -88,6 +116,13 @@ label {
 .square label,
 .square input {
     width: 50px;
+    height: 50px;
+}
+
+.long-button,
+.long label,
+.long input {
+    width: 200px;
     height: 50px;
 }
 
