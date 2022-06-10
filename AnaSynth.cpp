@@ -171,7 +171,7 @@ void InteractWithCanvas(emscripten::val event)
   if (eventName == "mouseup")
   {
     audio::initialize();
-    std::vector<double> frequencies{261.63, 293.66, 329.63}; // C major chord
+    std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
     audio::set_vars(frequencies, 0.5, 1.5);
     audio::play_or_pause();
   }
