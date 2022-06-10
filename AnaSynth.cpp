@@ -152,9 +152,7 @@ namespace audio
       for (auto &oscillator: oscillators) {
         oscillator.call<void>("connect", gainNode.value()); // connect oscillator to audio output
       }
-      std::cout << gainNode.value()["gain"]["value"].as<double>() << " " << initialVolume << "\n";
       gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
-      std::cout << gainNode.value()["gain"]["value"].as<double>() << " " << initialVolume << "\n";
       volume_control();
       volumeManager.emplace(
               window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
