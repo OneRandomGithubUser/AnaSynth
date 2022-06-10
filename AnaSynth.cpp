@@ -366,14 +366,14 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("stroke");
   DrawInductor(ctx, width*0.7, height*0.5, highlightInductor);
   ctx.call<void>("beginPath");
-  ctx.call<void>("moveTo", width*0.7+40, height*0.5);
+  ctx.call<void>("moveTo", width*0.7+39, height*0.5);
   ctx.call<void>("lineTo", width*0.9, height*0.5);
   ctx.call<void>("lineTo", width*0.9, height*0.2);
   ctx.call<void>("lineTo", width*0.3+10, height*0.2);
   ctx.call<void>("stroke");
   DrawSpeaker(ctx, width*0.3, height*0.2, highlightSpeaker);
   ctx.call<void>("beginPath");
-  ctx.call<void>("moveTo", width*0.3-10, height*0.2);
+  ctx.call<void>("moveTo", width*0.3-12, height*0.2);
   ctx.call<void>("lineTo", width*0.1, height*0.2);
   ctx.call<void>("lineTo", width*0.1, height*0.5);
   ctx.call<void>("lineTo", width*0.3-25, height*0.5);
