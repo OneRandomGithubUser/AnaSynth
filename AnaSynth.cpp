@@ -96,11 +96,24 @@ namespace audio
       // emscripten currently does not have much support for throwing std::exception
       std::cout << "Error: audio::set_vars() called before audio::initialize()\n";
     }
+    for (auto &oscillator: oscillators)
+    {
+      oscillator.call<void>("stop");
+      oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+    }
+    oscillators.clear();
     for (auto &frequency: frequencies) {
       emscripten::val oscillator = audioContext.value().call<emscripten::val>("createOscillator");
       oscillator.set("type", emscripten::val("sine"));
       oscillator["frequency"].set("value", emscripten::val(frequency));
       oscillators.emplace_back(oscillator);
+    }
+    // connect oscillators to audio output
+    for (auto &oscillator: oscillators) {
+      oscillator.call<void>("connect", gainNode.value());
+    }
+    // start the oscillators together
+    for (auto &oscillator: oscillators) {
       oscillator.call<void>("start");
     }
     initialVolume = startingVolume;
@@ -136,23 +149,28 @@ namespace audio
     }
     if (playing)
     {
-      // pause
+      emscripten::val currentTime = audioContext.value()["currentTime"];
+      gainNode.value()["gain"].call<void>("cancelScheduledValues", currentTime);
+      // fade out in 0.1 seconds - doesn't actually work so, if time leftover, TODO
+      gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
+                                                     emscripten::val(0.000001),
+                                                     emscripten::val(currentTime.as<double>() + 0.1));
+      // pause in 0.1 seconds
       for (auto &oscillator: oscillators)
       {
-        oscillator.call<void>("stop");
-        oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+        oscillator.call<void>("stop", emscripten::val(currentTime.as<double>() + 0.1));
       }
       window.call<void>("clearInterval", volumeManager.value());
-      gainNode.value()["gain"].call<void>("cancelScheduledValues", audioContext.value()["currentTime"]);
       timeConstants = 0;
       playing = false;
     } else {
       // play
       beginTime = audioContext.value()["currentTime"].as<double>();
-      for (auto &oscillator: oscillators) {
-        oscillator.call<void>("connect", gainNode.value()); // connect oscillator to audio output
-      }
-      gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
+      // mute sound then go to full volume in 0.05 seconds
+      gainNode.value()["gain"].set("value", emscripten::val(0.000001));
+      gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
+                                                     emscripten::val(initialVolume),
+                                                     emscripten::val(beginTime + 0.05));
       volume_control();
       volumeManager.emplace(
               window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
