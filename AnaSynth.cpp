@@ -121,6 +121,28 @@ namespace audio
   {
     return initialVolume;
   }
+  double get_current_volume()
+  {
+    if (playing) {
+      return initialVolume * pow(e, -((audioContext.value()["currentTime"].as<double>() - beginTime) / TIME_CONSTANT));
+    } else {
+      return 0;
+    }
+  }
+  double get_current()
+  {
+    if (playing)
+    {
+      double temp = 0.0;
+      for (auto& frequency : _frequencies)
+      {
+        temp += sin(2*pi*frequency*(audioContext.value()["currentTime"].as<double>() - beginTime));
+      }
+      return get_current_volume() * temp;
+    } else {
+      return 0;
+    }
+  }
   double get_time_constant()
   {
     return TIME_CONSTANT;
@@ -377,6 +399,37 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("arc", height*0.3+45, height*0.5, 2, 0, 2*pi);
   ctx.call<void>("fill");
 }
+
+void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, bool highlight)
+{
+  // NOTE: this must be placed on a TOP edge, also this assumes 60 fps TODO
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
+  ctx.call<void>("fillText", emscripten::val("CURRENT"), x, y - spacing - ctx.call<emscripten::val>("measureText", emscripten::val("CURRENT"))["actualBoundingBoxDescent"].as<double>());
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", x, y + spacing);
+  double arrowLength = audio::get_initial_volume() * pixelsAtVolume1 * current;
+  ctx.call<void>("lineTo", x + arrowLength, y + spacing);
+  if (arrowLength > 0)
+  {
+    ctx.call<void>("moveTo", x + arrowLength - spacing/2.0, y + spacing/2.0);
+    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
+    ctx.call<void>("lineTo", x + arrowLength - spacing/2.0, y + 3*spacing/2.0);
+  } else if (arrowLength < 0) {
+    ctx.call<void>("moveTo", x + arrowLength + spacing/2.0, y + spacing/2.0);
+    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
+    ctx.call<void>("lineTo", x + arrowLength + spacing/2.0, y + 3*spacing/2.0);
+  }
+  ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
+}
 int split(int input, int totalDistance)
 {
   if (input < totalDistance / 3)
@@ -515,6 +568,9 @@ void RenderCanvas()
       ctx.call<void>("stroke");
       ctx.call<void>("beginPath");
       ctx.call<void>("moveTo", width * 0.2, height * 0.5);
+      // NOTE: this assumes a frame rate of 60 fps. Could change, but later. TODO
+      double current = sin(audio::get_time_constant()*FRAME_COUNT/60);
+      ctx.call<void>("translate", emscripten::val(0), emscripten::val(centralThickness/4.0*current));
       ctx.call<void>("lineTo", width * 0.5 - centralThickness/2.0, height * 0.5);
       ctx.call<void>("moveTo", width * 0.5 + centralThickness/2.0, height * 0.5);
       ctx.call<void>("lineTo", width * 0.5 + solenoidThickness/2.0, height * 0.5);
@@ -527,14 +583,17 @@ void RenderCanvas()
         ctx.call<void>("lineTo", width * 0.5 + solenoidThickness/2.0, tempY);
         tempY += solenoidSpacing;
       }
+      ctx.call<void>("translate", emscripten::val(0), emscripten::val(-centralThickness/4.0*current));
       ctx.call<void>("lineTo", width * 0.8 - thickness*2.5, height * 0.5);
       ctx.call<void>("lineTo", width * 0.8, height * 0.5);
       ctx.call<void>("stroke");
       ctx.call<void>("beginPath");
       ctx.set("lineWidth", emscripten::val(2));
       ctx.call<void>("moveTo", width * 0.95, height * 0.5 - width * 0.3);
+      ctx.call<void>("translate", emscripten::val(0), emscripten::val(centralThickness/4.0*current));
       ctx.call<void>("lineTo", width * 0.5 + solenoidThickness/2.0, height * 0.5);
       ctx.call<void>("lineTo", width * 0.5 - solenoidThickness/2.0, height * 0.5);
+      ctx.call<void>("translate", emscripten::val(0), emscripten::val(-centralThickness/4.0*current));
       ctx.call<void>("lineTo", width * 0.05, height * 0.5 - width * 0.3);
       ctx.call<void>("stroke");
       ctx.call<void>("beginPath");
@@ -542,14 +601,19 @@ void RenderCanvas()
       ctx.call<void>("fillText", emscripten::val("S"), width * 0.5, height * 0.5 + width * 0.15 - thickness*1.5);
       ctx.call<void>("fillText", emscripten::val("N"), width * 0.2 + thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
       ctx.call<void>("fillText", emscripten::val("N"), width * 0.8 - thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
+      DrawCurrent(ctx, width*0.1, height*0.5, 10, width * 0.05, current, false);
       break;
     }
     case 5:
       DrawFullCircuit(ctx, false, false, false, true);
       break;
-    case 6:
+    case 6: {
+      double width = canvas["width"].as<double>();
+      double height = canvas["height"].as<double>();
       DrawFullCircuit(ctx, false, false, true, false);
+      DrawCurrent(ctx, width * 0.7, height * 0.2, 5, width * 0.1, audio::get_current(), false);
       break;
+    }
     default:
       ctx.call<void>("beginPath");
       ctx.call<void>("arc", 200 + 100*sin(FRAME_COUNT/(12*pi)), 150 + 75*sin(FRAME_COUNT/(7.5*pi)), abs(50*sin(FRAME_COUNT/(18*pi))), 0, 2 * pi);
@@ -906,7 +970,11 @@ void RetrieveData()
     std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
     audio::set_frequencies(frequencies);
   }
-  StoreData(page);
+  for (auto& frequency : audio::get_frequencies())
+  {
+    std::cout << frequency << " ";
+  }
+  std::cout << "\n";
 }
 
 int main() {
@@ -931,6 +999,7 @@ int main() {
   document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
   document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
   RetrieveData();
+  StoreData(page);
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
