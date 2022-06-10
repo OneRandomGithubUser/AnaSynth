@@ -57,6 +57,10 @@ label {
     box-sizing: content-box;
 }
 
+.button:disabled {
+    cursor: not-allowed;
+}
+
 .selectable-button input[type="radio"],
 .selectable-button input[type="checkbox"] {
     display: none;

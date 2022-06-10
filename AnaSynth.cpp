@@ -15,6 +15,7 @@ emscripten::val document = emscripten::val::global("document");
 const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
+bool circuitCompleted = false;
 
 namespace audio
 {
@@ -182,7 +183,7 @@ void PlayOrPauseSound(emscripten::val event)
 
 void InteractWithCanvas(emscripten::val event)
 {
-  std::string eventName = event["type"].as<std::string>();
+  // std::string eventName = event["type"].as<std::string>();
   // double pageX = event["pageX"].as<double>();
   // double pageY = event["pageY"].as<double>();
   // std::cout << eventName << " " << pageX << " " << pageY << "\n";
@@ -383,7 +384,7 @@ void RenderCanvas()
   std::uniform_int_distribution<int> widthDist(0,canvas["width"].as<int>());
   std::uniform_int_distribution<int> heightDist(0,canvas["height"].as<int>());
   static std::vector<std::vector<int>> interpolation;
-  // two interpolation points over time, then r, g, b, startX, startY, endX, endY for the linear gradient
+  // two interpolation points over time, then r1, g1, b1, r2, g2, b2, startX, startY, endX, endY for the linear gradient
   if (FRAME_COUNT == 0) {
     interpolation.push_back({colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), widthDist(gen), heightDist(gen),
                                        widthDist(gen), heightDist(gen)});
@@ -524,7 +525,6 @@ void RenderCanvas()
       DrawFullCircuit(ctx, false, false, true, false);
       break;
     default:
-      ctx.call<void>("fillRect", 0, 0, canvas["width"], canvas["height"]);
       ctx.call<void>("beginPath");
       ctx.call<void>("arc", 200 + 100*sin(FRAME_COUNT/(12*pi)), 150 + 75*sin(FRAME_COUNT/(7.5*pi)), abs(50*sin(FRAME_COUNT/(18*pi))), 0, 2 * pi);
       ctx.call<void>("stroke");
@@ -532,7 +532,7 @@ void RenderCanvas()
   FRAME_COUNT++;
 }
 
-void addPlayButton(emscripten::val sidebar)
+void addParagraphlayButton(emscripten::val sidebar)
 {
   emscripten::val playButton = document.call<emscripten::val>("createElement", emscripten::val("button"));
   playButton.set("className", emscripten::val("button"));
@@ -550,30 +550,67 @@ void addNextButton(emscripten::val sidebar)
   nextButton.set("innerHTML", emscripten::val("NEXT"));
   sidebar.call<void>("appendChild", nextButton);
   document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
+  document.call<emscripten::val>("getElementById", emscripten::val("next")).set("disabled", emscripten::val(true));
 }
 
-emscripten::val addInputField(const char* id) 
+void enablePlayButton()
 {
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).set("disabled", emscripten::val(false));
+}
+
+void disablePlayButton()
+{
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).set("disabled", emscripten::val(true));
+}
+
+void enableNextButton()
+{
+  document.call<emscripten::val>("getElementById", emscripten::val("next")).set("disabled", emscripten::val(false));
+}
+
+void disableNextButton()
+{
+  document.call<emscripten::val>("getElementById", emscripten::val("next")).set("disabled", emscripten::val(true));
+}
+
+emscripten::val addInputField(const char* id, bool disabled, double step, double min, double max, double value) {
   emscripten::val field = document.call<emscripten::val>("createElement", emscripten::val("input"));
   field.set("id", emscripten::val(id));
   field.set("type", emscripten::val("number"));
+  field.set("disabled", emscripten::val(disabled));
+  field.set("step", emscripten::val(step));
+  field.set("min", emscripten::val(min));
+  field.set("max", emscripten::val(max));
+  field.set("value", emscripten::val(value));
   return field;
 }
 
-emscripten::val addInputField(const char* id, bool disabled) 
+emscripten::val addInputField(const char* id, bool disabled, double step, double min)
 {
   emscripten::val field = document.call<emscripten::val>("createElement", emscripten::val("input"));
   field.set("id", emscripten::val(id));
   field.set("type", emscripten::val("number"));
   field.set("disabled", emscripten::val(disabled));
+  field.set("step", emscripten::val(step));
+  field.set("min", emscripten::val(min));
   return field;
 }
 
-void addBr(emscripten::val sidebar) {
+emscripten::val addInputField(const char* id, bool disabled, double step)
+{
+  emscripten::val field = document.call<emscripten::val>("createElement", emscripten::val("input"));
+  field.set("id", emscripten::val(id));
+  field.set("type", emscripten::val("number"));
+  field.set("disabled", emscripten::val(disabled));
+  field.set("step", emscripten::val(step));
+  return field;
+}
+
+void addBreak(emscripten::val sidebar) {
   sidebar.call<void>("appendChild", document.call<emscripten::val>("createElement", emscripten::val("br")));
 }
 
-void addP(emscripten::val sidebar, const char* s) {
+void addParagraph(emscripten::val sidebar, const char* s) {
   emscripten::val p = document.call<emscripten::val>("createElement", emscripten::val("p"));
   p.set("innerHTML", s);
   sidebar.call<void>("appendChild", p);
@@ -586,54 +623,110 @@ void addLabel(emscripten::val sidebar, const char* f, const char* s) {
   sidebar.call<void>("appendChild", l);
 }
 
-void InitPage(int i)
+void InitializePage(int i)
 {
-  emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
-  sidebar.set("innerHTML", "");
-  switch(i)
-  {
-    case(0):
-      addNextButton(sidebar);
+  emscripten::val info = document.call<emscripten::val>("getElementById", emscripten::val("info"));
+  info.set("innerHTML", "");
+  switch(i) {
+    case (0):
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
       break;
-    case(1):
-    {
-      emscripten::val lValue = addInputField("lValue");
-      emscripten::val rValue = addInputField("rValue");
-      emscripten::val tValue = addInputField("tValue", true);
+    case (1): {
+      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
+      emscripten::val rValue = addInputField("rValue", true, 0.1, 0);
+      emscripten::val tValue = addInputField("tValue", true, 0.1, 0);
 
-      addLabel(sidebar, "lValue", "L = ");
-      sidebar.call<emscripten::val>("appendChild", lValue);
-      addLabel(sidebar, "lValue", "F");
-      addBr(sidebar);
-      addBr(sidebar);
-      addLabel(sidebar, "rValue", "R = ");
-      sidebar.call<emscripten::val>("appendChild", rValue);
-      addLabel(sidebar, "rValue", "&#8486");
-      addBr(sidebar);
-      addBr(sidebar);
-      addLabel(sidebar, "tValue", "&#120591 = ");
-      sidebar.call<emscripten::val>("appendChild", tValue);
-      addLabel(sidebar, "tValue", "s");
-      addPlayButton(sidebar);
+      addParagraph(info, "The time constant, &#120591, of this system is given by the equation");
+      addParagraph(info, "&#120591 = 2L/R");
+      addParagraph(info,
+                   "After one time constant, the volume of the sound will be e^-1 of its original volume, or about 36.7879% of its original volume.");
+      addParagraph(info,
+                   "After two time constants, the volume of the sound will be e^-2 of its original volume, or about 13.5335% of its original volume.");
+      addParagraph(info, "Three time constants will have a volume of 4.97871%, four will have 1.83156%, and so on.");
+      addParagraph(info,
+                   "We want to hear the sound that we make! So let's give the sound a reasonable time constant of at least 1 second.");
+      addParagraph(info, "The resistance of the speaker is already given to us.");
+      addLabel(info, "lValue", "L = ");
+      info.call<emscripten::val>("appendChild", lValue);
+      addLabel(info, "lValue", "F");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "rValue", "R = ");
+      info.call<emscripten::val>("appendChild", rValue);
+      addLabel(info, "rValue", "&#8486");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "tValue", "&#120591 = ");
+      info.call<emscripten::val>("appendChild", tValue);
+      addLabel(info, "tValue", "s");
+      addParagraph(info, "GOAL: &#120591 > 1 s");
+      addParagraph(info, "RECOMMENDED: &#120591 > 30 s");
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      disableNextButton();
       break;
     }
-    case(2):
-      addNextButton(sidebar);
+    case (2):
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
       break;
-    case(3):
-      addPlayButton(sidebar);
-      addNextButton(sidebar);
+    case (3):
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
       break;
-    case(4):
-      addNextButton(sidebar);
+    case (4):
+      addParagraph(info,
+                   "The current that goes through a speaker powers a solenoid (called a \"voice coil\"), which generates magnetic field according to");
+      addParagraph(info, "B&#8347 = &#956&#8320nI");
+      addParagraph(info, "and attracts or repels the magnet that the solenoid is wrapped around.");
+      addParagraph(info,
+                   "As the solenoid, which is free floating, pulsates away and towards the magnet, it pulls along the speaker cone attached to it, creating alternating waves of low and high air pressure, which we hear as sound");
+      addParagraph(info, "The conversion of electrical energy to heat and sound is why a speaker has a resistance.");
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
       break;
-    case(5):
-      addPlayButton(sidebar);
-      addNextButton(sidebar);
+    case (5): {
+      emscripten::val rValue = addInputField("rValue", false, 0.1, 0);
+      emscripten::val efficiencyValue = addInputField("efficiencyValue", false, 0.01, 0, 100, 0.1);
+      addParagraph(info, "Now, we give you the freedom to manipulate the statistics of the speaker.");
+      addParagraph(info, "A very efficient speaker has an efficiency of about 0.3%.");
+      addParagraph(info,
+                   "that manipulating the values of the speaker may cause values entered in previously to become invalid.");
+      addLabel(info, "rValue", "R = ");
+      info.call<emscripten::val>("appendChild", rValue);
+      addLabel(info, "rValue", "&#8486");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "efficiencyValue", "efficiency = ");
+      info.call<emscripten::val>("appendChild", efficiencyValue);
+      addLabel(info, "efficiencyValue", "%");
+      enablePlayButton();
+      enableNextButton();
       break;
+    }
     case(6):
-      addPlayButton(sidebar);
-      addNextButton(sidebar);
+      enablePlayButton();
+      enableNextButton();
       break;
     default:
       printf("page out of range\n");
@@ -643,6 +736,7 @@ void InitPage(int i)
 
 void RenderSidebar()
 {
+  static bool nextButtonEnabled = false;
   switch(page)
   {
     case(0):
@@ -653,18 +747,36 @@ void RenderSidebar()
       emscripten::val resistor = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val tConstant = document.call<emscripten::val>("getElementById", emscripten::val("tValue"));
       double tV = 0;
+      resistor.set("value", emscripten::val(4));
       if(inductor["value"].as<std::string>() != "" && resistor["value"].as<std::string>() != "") {
         tV = 2 * stod(inductor["value"].as<std::string>()) / stod(resistor["value"].as<std::string>());
-        tConstant.set("value", emscripten::val(tV));
+        if (std::isinf(tV))
+        {
+          tConstant.set("value", emscripten::val("Infinity"));
+        } else {
+          tConstant.set("value", emscripten::val(tV));
+        }
       }
       
       emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
       emscripten::val next = document.call<emscripten::val>("getElementById", emscripten::val("next"));
-      if(next == emscripten::val::null() && tV > 1) {
+      if(next == emscripten::val::null()) {
         addNextButton(sidebar);
+        if (tV > 1 && !nextButtonEnabled) {
+          std::cout << tV << " 1\n";
+          enableNextButton();
+          nextButtonEnabled = true;
+        } else if (tV < 1 && nextButtonEnabled) {
+          std::cout << tV << " 2\n";
+          disableNextButton();
+          nextButtonEnabled = false;
+        }
       }
       break;
     }
+    case 6:
+      circuitCompleted = true;
+      break;
     default:
       break;
   }
@@ -682,12 +794,12 @@ EMSCRIPTEN_KEEPALIVE
 void SelectPage(int i)
 {
   page = i;
-  InitPage(page);
+  InitializePage(page);
 }
 void NextPage(emscripten::val event)
 {
   page++;
-  InitPage(page);
+  InitializePage(page);
 }
 }
 
@@ -711,6 +823,8 @@ int main() {
   ctx.set("textAlign", emscripten::val("center"));
   ctx.set("textBaseline", emscripten::val("middle"));
   ctx.set("font", emscripten::val("20px Arial"));
+  document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
