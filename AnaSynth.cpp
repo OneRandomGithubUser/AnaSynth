@@ -7,6 +7,8 @@
 #include <cmath>
 #include <vector>
 #include <optional>
+#include <random>
+#include <vector>
 
 emscripten::val window = emscripten::val::global("window");
 emscripten::val document = emscripten::val::global("document");
@@ -315,13 +317,59 @@ void DrawFullCircuit(emscripten::val ctx) {
       ctx.call<void>("arc", 240, 400, 2, 0, 2*pi);
       ctx.call<void>("fill");
 }
+int interpolate(std::vector<std::vector<int>>& interpolation, int index, int FRAME_COUNT)
+{
+  return round((1-(FRAME_COUNT%600)/600.0)*interpolation[0][index] + ((FRAME_COUNT%600)/600.0)*interpolation[1][index]);
+}
 
 void RenderCanvas()
 {
   static int FRAME_COUNT = 0;
   emscripten::val canvas = document.call<emscripten::val>("getElementById", emscripten::val("canvas"));
   emscripten::val ctx = canvas.call<emscripten::val>("getContext", emscripten::val("2d"));
-  ctx.set("fillStyle", emscripten::val("white"));
+
+  // subtly change the fillStyle color
+  const static std::string hex[16] = {"0","1","2","3","4","5","6","7","8","9","A","B","C","D","E","F"};
+  std::random_device rd;
+  std::default_random_engine gen(rd());
+  std::uniform_int_distribution<int> colorDist(200,255);
+  std::uniform_int_distribution<int> widthDist(0,canvas["width"].as<int>());
+  std::uniform_int_distribution<int> heightDist(0,canvas["height"].as<int>());
+  static std::vector<std::vector<int>> interpolation;
+  // two interpolation points over time, then r, g, b, startX, startY, endX, endY for the linear gradient
+  if (FRAME_COUNT == 0) {
+    interpolation.push_back({colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), widthDist(gen), heightDist(gen),
+                                       widthDist(gen), heightDist(gen)});
+    interpolation.push_back({colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), widthDist(gen), heightDist(gen),
+                             widthDist(gen), heightDist(gen)});
+  }
+  if (FRAME_COUNT % 600 == 0) {
+    interpolation.erase(interpolation.begin());
+    interpolation.push_back({colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), colorDist(gen), widthDist(gen), heightDist(gen),
+                                       widthDist(gen), heightDist(gen)});
+  }
+  emscripten::val gradient = ctx.call<emscripten::val>("createLinearGradient",
+                                                       emscripten::val(-interpolate(interpolation,6,FRAME_COUNT)),
+                                                       emscripten::val(-interpolate(interpolation,7,FRAME_COUNT)),
+                                                       emscripten::val(canvas["width"].as<int>()+interpolate(interpolation,8,FRAME_COUNT)),
+                                                       emscripten::val(canvas["height"].as<int>()+interpolate(interpolation,9,FRAME_COUNT)));
+  std::string temp = "";
+  int tens = 256*256*interpolate(interpolation,0,FRAME_COUNT)+256*interpolate(interpolation,1,FRAME_COUNT)+interpolate(interpolation,2,FRAME_COUNT);
+  while (tens != 0)
+  {
+    temp = hex[tens%16] + temp;
+    tens = floor(tens/16);
+  }
+  gradient.call<void>("addColorStop", emscripten::val(0), emscripten::val("#" + temp));
+  temp = "";
+  tens = 256*256*interpolate(interpolation,3,FRAME_COUNT)+256*interpolate(interpolation,4,FRAME_COUNT)+interpolate(interpolation,5,FRAME_COUNT);
+  while (tens != 0)
+  {
+    temp = hex[tens%16] + temp;
+    tens = floor(tens/16);
+  }
+  gradient.call<void>("addColorStop", emscripten::val(1), emscripten::val("#" + temp));
+  ctx.set("fillStyle", gradient);
   ctx.call<void>("fillRect", 0, 0, canvas["width"], canvas["height"]);
   switch(page)
   {
