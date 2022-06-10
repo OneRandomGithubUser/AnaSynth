@@ -195,7 +195,9 @@ void ResizeCanvas(emscripten::val event)
   emscripten::val ctx = canvas.call<emscripten::val>("getContext", emscripten::val("2d"));
   canvas.set("width", emscripten::val(window["innerWidth"].as<double>() * 0.7));
   canvas.set("height", emscripten::val(window["innerHeight"].as<double>() - 80));
-  ctx.set("fillStyle", emscripten::val("white"));
+  ctx.set("textAlign", emscripten::val("center"));
+  ctx.set("textBaseline", emscripten::val("middle"));
+  ctx.set("font", emscripten::val("20px Arial"));
 }
 
 // width: 60
@@ -826,7 +828,6 @@ int main() {
   emscripten::val ctx = canvas.call<emscripten::val>("getContext", emscripten::val("2d"));
   canvas.set("width", emscripten::val(window["innerWidth"].as<double>() * 0.7));
   canvas.set("height", emscripten::val(window["innerHeight"].as<double>() - 80));
-  ctx.set("fillStyle", emscripten::val("white"));
   window.call<void>("addEventListener", emscripten::val("resize"), emscripten::val::module_property("ResizeCanvas"));
   ctx.set("textAlign", emscripten::val("center"));
   ctx.set("textBaseline", emscripten::val("middle"));
