@@ -222,7 +222,12 @@ void DrawResistor(emscripten::val ctx, int x, int y) {
 }
 
 // width: 50
-void DrawCapacitor(emscripten::val ctx, int x, int y) {
+void DrawCapacitor(emscripten::val ctx, int x, int y, bool highlight) {
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", x, y);
   ctx.call<void>("lineTo", x+20, y);
@@ -233,19 +238,39 @@ void DrawCapacitor(emscripten::val ctx, int x, int y) {
   ctx.call<void>("moveTo", x+30, y);
   ctx.call<void>("lineTo", x+50, y);
   ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
 }
 
 // width: 60
-void DrawInductor(emscripten::val ctx, int x, int y) {
+void DrawInductor(emscripten::val ctx, int x, int y, bool highlight) {
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", x, y);
   ctx.call<void>("arc", x+10, y, 10, pi, 0, false);
   ctx.call<void>("arc", x+30, y, 10, pi, 0, false);
   ctx.call<void>("arc", x+50, y, 10, pi, 0, false);
   ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
 }
 
-void DrawSpeaker(emscripten::val ctx, int x, int y) {
+void DrawSpeaker(emscripten::val ctx, int x, int y, bool highlight) {
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", x, y-5);
   ctx.call<void>("lineTo", x, y+5);
@@ -257,9 +282,19 @@ void DrawSpeaker(emscripten::val ctx, int x, int y) {
   ctx.call<void>("lineTo", x+30, y-20);
   ctx.call<void>("lineTo", x+20, y-5);
   ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
 }
 
-void DrawBattery(emscripten::val ctx, int x, int y) {
+void DrawBattery(emscripten::val ctx, int x, int y, bool highlight) {
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", x, y);
   ctx.call<void>("lineTo", x+10, y);
@@ -274,48 +309,53 @@ void DrawBattery(emscripten::val ctx, int x, int y) {
   ctx.call<void>("moveTo", x+40, y);
   ctx.call<void>("lineTo", x+50, y);
   ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
 }
 
-void DrawFullCircuit(emscripten::val ctx) {
-      DrawCapacitor(ctx, 170, 400);
-      ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 240, 400);
-      ctx.call<void>("lineTo", 320, 400);
-      ctx.call<void>("stroke");
-      DrawInductor(ctx, 320, 400);
-      ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 380, 400);
-      ctx.call<void>("lineTo", 430, 400);
-      ctx.call<void>("lineTo", 430, 200);
-      ctx.call<void>("lineTo", 200, 200);
-      ctx.call<void>("stroke");
-      DrawSpeaker(ctx, 180, 200);
-      ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 180, 200);
-      ctx.call<void>("lineTo", 130, 200);
-      ctx.call<void>("lineTo", 130, 400);
-      ctx.call<void>("lineTo", 170, 400);
-      ctx.call<void>("lineTo", 170, 320);
-      ctx.call<void>("stroke");
-      DrawBattery(ctx, 170, 320);
-      ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 220, 320);
-      ctx.call<void>("lineTo", 220, 380);
-      ctx.call<void>("stroke");
-      ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 220, 400);
-      ctx.call<void>("lineTo", 234, 386);
-      ctx.call<void>("stroke");
-      ctx.set("fillStyle", emscripten::val("black"));
-      ctx.call<void>("beginPath");
-      ctx.call<void>("arc", 220, 400, 2, 0, 2*pi);
-      ctx.call<void>("fill");
-      ctx.call<void>("beginPath");
-      ctx.call<void>("arc", 220, 380, 2, 0, 2*pi);
-      ctx.call<void>("fill");
-      ctx.call<void>("beginPath");
-      ctx.call<void>("arc", 240, 400, 2, 0, 2*pi);
-      ctx.call<void>("fill");
+void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
+  DrawCapacitor(ctx, 170, 400, highlightCapacitor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", 240, 400);
+  ctx.call<void>("lineTo", 320, 400);
+  ctx.call<void>("stroke");
+  DrawInductor(ctx, 320, 400, highlightInductor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", 380, 400);
+  ctx.call<void>("lineTo", 430, 400);
+  ctx.call<void>("lineTo", 430, 200);
+  ctx.call<void>("lineTo", 200, 200);
+  ctx.call<void>("stroke");
+  DrawSpeaker(ctx, 180, 200, highlightSpeaker);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", 180, 200);
+  ctx.call<void>("lineTo", 130, 200);
+  ctx.call<void>("lineTo", 130, 400);
+  ctx.call<void>("lineTo", 170, 400);
+  ctx.call<void>("lineTo", 170, 320);
+  ctx.call<void>("stroke");
+  DrawBattery(ctx, 170, 320, highlightBattery);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", 220, 320);
+  ctx.call<void>("lineTo", 220, 380);
+  ctx.call<void>("stroke");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", 220, 400);
+  ctx.call<void>("lineTo", 234, 386);
+  ctx.call<void>("stroke");
+  ctx.set("fillStyle", emscripten::val("black"));
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", 220, 400, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", 220, 380, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", 240, 400, 2, 0, 2*pi);
+  ctx.call<void>("fill");
 }
 int interpolate(std::vector<std::vector<int>>& interpolation, int index, int FRAME_COUNT)
 {
@@ -374,12 +414,12 @@ void RenderCanvas()
   switch(page)
   {
     case 0:
-      DrawCapacitor(ctx, 170, 400);
+      DrawCapacitor(ctx, 170, 400, true);
       ctx.call<void>("beginPath");
       ctx.call<void>("moveTo", 220, 400);
       ctx.call<void>("lineTo", 320, 400);
       ctx.call<void>("stroke");
-      DrawInductor(ctx, 320, 400);
+      DrawInductor(ctx, 320, 400, true);
       ctx.call<void>("beginPath");
       ctx.call<void>("moveTo", 380, 400);
       ctx.call<void>("lineTo", 430, 400);
@@ -390,19 +430,19 @@ void RenderCanvas()
       ctx.call<void>("stroke");
       break;
     case 1:
-      DrawFullCircuit(ctx);
+      DrawFullCircuit(ctx, false, true, true, false);
       break;
     // case 2:
     //   std::cout << "b3" << std::endl;
     //   break;
     case 3:
-      DrawFullCircuit(ctx);
+      DrawFullCircuit(ctx, true, true, false, false);
       break;
     case 5:
-      DrawFullCircuit(ctx);
+      DrawFullCircuit(ctx, false, false, false, true);
       break;
     case 6:
-      DrawFullCircuit(ctx);
+      DrawFullCircuit(ctx, false, false, true, false);
       break;
     default:
       ctx.call<void>("fillRect", 0, 0, canvas["width"], canvas["height"]);
