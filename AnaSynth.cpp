@@ -114,6 +114,10 @@ namespace audio
     set_initial_volume(startingVolume);
     set_time_constant(timeConstant);
   }
+  bool get_playing()
+  {
+    return playing;
+  }
   std::vector<double>& get_frequencies()
   {
     return _frequencies;
@@ -963,44 +967,38 @@ void RetrieveData()
   emscripten::val pageNumber = localStorage.call<emscripten::val>("getItem", emscripten::val("selectedPage"));
   emscripten::val timeConstant = localStorage.call<emscripten::val>("getItem", emscripten::val("timeConstant"));
   emscripten::val initialVolume = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume"));
-  emscripten::val frequencies = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume"));
+  emscripten::val frequencies = localStorage.call<emscripten::val>("getItem", emscripten::val("frequencies"));
   // checks if there is such a stored value: typeOf will be "object" when the emscripten::val is null
-  if (pageNumber.typeOf().as<std::string>() == "string") {
-    SelectPage(std::stoi(pageNumber.as<std::string>()));
-  } else {
-    SelectPage(0);
-  }
   if (timeConstant.typeOf().as<std::string>() == "string") {
     audio::set_time_constant(std::stod(timeConstant.as<std::string>()));
   } else {
     audio::set_time_constant(1.5);
   }
-  if (timeConstant.typeOf().as<std::string>() == "string") {
-    audio::set_initial_volume(std::stod(timeConstant.as<std::string>()));
+  if (initialVolume.typeOf().as<std::string>() == "string") {
+    audio::set_initial_volume(std::stod(initialVolume.as<std::string>()));
   } else {
     audio::set_initial_volume(0.5);
   }
   if (frequencies.typeOf().as<std::string>() == "string") {
-    std::string frequenciesString = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume")).as<std::string>();
+    std::string frequenciesString = frequencies.as<std::string>();
     std::vector<double> temp;
     while (frequenciesString != "")
     {
       int pos = frequenciesString.find(",");
       if (pos == std::string::npos) {break;}
-      std::cout << frequenciesString << " " << frequenciesString.substr(0, pos) << " " << frequenciesString.substr(pos) << " " << frequenciesString.substr(pos+1) << "\n";
       temp.push_back(std::stod(frequenciesString.substr(0, pos)));
       frequenciesString = frequenciesString.substr(pos+1);
     }
     audio::set_frequencies(temp);
   } else {
-    std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
-    audio::set_frequencies(frequencies);
+    std::vector<double> defaultFrequencies{261.63, 329.63, 392.00}; // C major chord
+    audio::set_frequencies(defaultFrequencies);
   }
-  for (auto& frequency : audio::get_frequencies())
-  {
-    std::cout << frequency << " ";
+  if (pageNumber.typeOf().as<std::string>() == "string") {
+    SelectPage(std::stoi(pageNumber.as<std::string>()));
+  } else {
+    SelectPage(0);
   }
-  std::cout << "\n";
 }
 
 int main() {
