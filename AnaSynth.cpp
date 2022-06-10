@@ -275,15 +275,15 @@ void DrawBattery(emscripten::val ctx, int x, int y) {
 }
 
 void DrawFullCircuit(emscripten::val ctx) {
-  DrawCapacitor(ctx, 170, 400);
+      DrawCapacitor(ctx, 170, 400);
       ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 240, 380);
-      ctx.call<void>("lineTo", 320, 380);
+      ctx.call<void>("moveTo", 240, 400);
+      ctx.call<void>("lineTo", 320, 400);
       ctx.call<void>("stroke");
-      DrawInductor(ctx, 320, 380);
+      DrawInductor(ctx, 320, 400);
       ctx.call<void>("beginPath");
-      ctx.call<void>("moveTo", 380, 380);
-      ctx.call<void>("lineTo", 430, 380);
+      ctx.call<void>("moveTo", 380, 400);
+      ctx.call<void>("lineTo", 430, 400);
       ctx.call<void>("lineTo", 430, 200);
       ctx.call<void>("lineTo", 200, 200);
       ctx.call<void>("stroke");
@@ -299,7 +299,10 @@ void DrawFullCircuit(emscripten::val ctx) {
       ctx.call<void>("beginPath");
       ctx.call<void>("moveTo", 220, 320);
       ctx.call<void>("lineTo", 220, 380);
-      ctx.call<void>("lineTo", 234, 394);
+      ctx.call<void>("stroke");
+      ctx.call<void>("beginPath");
+      ctx.call<void>("moveTo", 220, 400);
+      ctx.call<void>("lineTo", 234, 386);
       ctx.call<void>("stroke");
       ctx.set("fillStyle", emscripten::val("black"));
       ctx.call<void>("beginPath");
@@ -309,7 +312,7 @@ void DrawFullCircuit(emscripten::val ctx) {
       ctx.call<void>("arc", 220, 380, 2, 0, 2*pi);
       ctx.call<void>("fill");
       ctx.call<void>("beginPath");
-      ctx.call<void>("arc", 240, 380, 2, 0, 2*pi);
+      ctx.call<void>("arc", 240, 400, 2, 0, 2*pi);
       ctx.call<void>("fill");
 }
 
