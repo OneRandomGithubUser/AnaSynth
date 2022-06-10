@@ -180,19 +180,20 @@ namespace audio
   }
 }
 
+void PlayOrPauseSound(emscripten::val event)
+{
+  audio::initialize();
+  std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
+  audio::set_vars(frequencies, 0.5, 1.5);
+  audio::play_or_pause();
+}
+
 void InteractWithCanvas(emscripten::val event)
 {
   std::string eventName = event["type"].as<std::string>();
   // double pageX = event["pageX"].as<double>();
   // double pageY = event["pageY"].as<double>();
   // std::cout << eventName << " " << pageX << " " << pageY << "\n";
-  if (eventName == "mouseup")
-  {
-    audio::initialize();
-    std::vector<double> frequencies{261.63, 329.63, 392.00}; // C major chord
-    audio::set_vars(frequencies, 0.5, 1.5);
-    audio::play_or_pause();
-  }
 }
 
 void ResizeCanvas(emscripten::val event)
@@ -383,6 +384,7 @@ int main() {
   canvas.set("height", emscripten::val(window["innerHeight"].as<double>() - 80));
   ctx.set("fillStyle", emscripten::val("white"));
   window.call<void>("addEventListener", emscripten::val("resize"), emscripten::val::module_property("ResizeCanvas"));
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
@@ -396,4 +398,5 @@ EMSCRIPTEN_BINDINGS(bindings)
   emscripten::function("ResizeCanvas", ResizeCanvas);
   emscripten::function("SelectPage", SelectPage);
   emscripten::function("VolumeControl", audio::volume_control);
+  emscripten::function("PlayOrPauseSound", PlayOrPauseSound);
 }
