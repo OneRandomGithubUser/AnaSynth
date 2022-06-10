@@ -532,7 +532,7 @@ void RenderCanvas()
   FRAME_COUNT++;
 }
 
-void addParagraphlayButton(emscripten::val sidebar)
+void addPlayButton(emscripten::val sidebar)
 {
   emscripten::val playButton = document.call<emscripten::val>("createElement", emscripten::val("button"));
   playButton.set("className", emscripten::val("button"));
@@ -623,6 +623,14 @@ void addLabel(emscripten::val sidebar, const char* f, const char* s) {
   sidebar.call<void>("appendChild", l);
 }
 
+void addLabel(emscripten::val sidebar, const char* f, const char* s, const char* c) {
+  emscripten::val l = document.call<emscripten::val>("createElement", emscripten::val("label"));
+  l.set("htmlFor", f);
+  l.set("className", c);
+  l.set("innerHTML", s);
+  sidebar.call<void>("appendChild", l);
+}
+
 void InitializePage(int i)
 {
   emscripten::val info = document.call<emscripten::val>("getElementById", emscripten::val("info"));
@@ -651,17 +659,17 @@ void InitializePage(int i)
       addParagraph(info,
                    "We want to hear the sound that we make! So let's give the sound a reasonable time constant of at least 1 second.");
       addParagraph(info, "The resistance of the speaker is already given to us.");
-      addLabel(info, "lValue", "L = ");
+      addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "F");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "rValue", "R = ");
+      addLabel(info, "rValue", "R = ", "left-label");
       info.call<emscripten::val>("appendChild", rValue);
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "tValue", "&#120591 = ");
+      addLabel(info, "tValue", "&#120591 = ", "left-label");
       info.call<emscripten::val>("appendChild", tValue);
       addLabel(info, "tValue", "s");
       addParagraph(info, "GOAL: &#120591 > 1 s");
@@ -712,12 +720,12 @@ void InitializePage(int i)
       addParagraph(info, "A very efficient speaker has an efficiency of about 0.3%.");
       addParagraph(info,
                    "that manipulating the values of the speaker may cause values entered in previously to become invalid.");
-      addLabel(info, "rValue", "R = ");
+      addLabel(info, "rValue", "R = ", "left-label");
       info.call<emscripten::val>("appendChild", rValue);
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "efficiencyValue", "efficiency = ");
+      addLabel(info, "efficiencyValue", "dB<sub>1m</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", efficiencyValue);
       addLabel(info, "efficiencyValue", "%");
       enablePlayButton();
