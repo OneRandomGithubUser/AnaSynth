@@ -890,13 +890,14 @@ void RenderSidebar()
 
       emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
       emscripten::val next = document.call<emscripten::val>("getElementById", emscripten::val("next"));
-      if (tV > 1 && !nextButtonEnabled) {
-        std::cout << tV << " 1\n";
-        enableNextButton();
-        nextButtonEnabled = true;
+      if (tV > 1) {
+        if (!nextButtonEnabled)
+        {
+          enableNextButton();
+          nextButtonEnabled = true;
+        }
         audio::set_time_constant(tV);
       } else if (tV < 1 && nextButtonEnabled) {
-        std::cout << tV << " 2\n";
         disableNextButton();
         nextButtonEnabled = false;
       }
