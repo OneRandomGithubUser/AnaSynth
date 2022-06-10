@@ -94,13 +94,13 @@ label {
 #play {
     bottom: 15px;
     left: 20%;
-    right: 60%;
+    right: 55%;
     height: 50px;
 }
 
 #next {
     bottom: 15px;
-    left: 60%;
+    left: 55%;
     right: 20%;
     height: 50px;
 }

@@ -15,6 +15,7 @@ emscripten::val document = emscripten::val::global("document");
 const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
+bool playing = false;
 bool circuitCompleted = false;
 
 namespace audio
@@ -225,6 +226,13 @@ void PlayOrPauseSound(emscripten::val event)
 {
   audio::initialize();
   audio::play_or_pause();
+  emscripten::val play = document.call<emscripten::val>("getElementById", emscripten::val("play"));
+  if(playing) {
+    play.set("innerHTML", "PLAY");
+  } else {
+    play.set("innerHTML", "PAUSE");
+  }
+  playing = !playing;
 }
 
 void InteractWithCanvas(emscripten::val event)
@@ -356,7 +364,7 @@ void DrawBattery(emscripten::val ctx, int x, int y, bool highlight) {
   }
 }
 
-void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
+void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery, int position) {
   double width = ctx["canvas"]["width"].as<double>();
   double height = ctx["canvas"]["width"].as<double>();
   DrawCapacitor(ctx, width*0.3, height*0.5, highlightCapacitor);
@@ -386,7 +394,19 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("stroke");
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", width*0.3+25, height*0.5);
-  ctx.call<void>("lineTo", width*0.3+25+14, height*0.5-14);
+  switch(position) {
+    case(0):
+      ctx.call<void>("lineTo", width*0.3+25+14, height*0.5-14);
+      break;
+    case(1):
+      ctx.call<void>("lineTo", width*0.3+25, height*0.5-20);
+      break;
+    case(2):
+      ctx.call<void>("lineTo", width*0.3+45, height*0.5);
+      break;
+    default:
+      break;
+  }
   ctx.call<void>("stroke");
   ctx.set("fillStyle", emscripten::val("black"));
   ctx.call<void>("beginPath");
@@ -518,13 +538,13 @@ void RenderCanvas()
       ctx.call<void>("stroke");
       break;
     case 1:
-      DrawFullCircuit(ctx, false, true, true, false);
+      DrawFullCircuit(ctx, false, true, true, false, 1);
       break;
     // case 2:
     //   std::cout << "b3" << std::endl;
     //   break;
     case 3:
-      DrawFullCircuit(ctx, true, true, false, false);
+      DrawFullCircuit(ctx, true, true, false, false, 1);
       break;
     case 4: {
       double width = canvas["width"].as<double>();
@@ -605,12 +625,20 @@ void RenderCanvas()
       break;
     }
     case 5:
-      DrawFullCircuit(ctx, false, false, false, true);
+      if(playing) {
+        DrawFullCircuit(ctx, false, false, true, false, 2);
+      } else {
+        DrawFullCircuit(ctx, false, false, true, false, 1);
+      }
       break;
     case 6: {
       double width = canvas["width"].as<double>();
       double height = canvas["height"].as<double>();
-      DrawFullCircuit(ctx, false, false, true, false);
+      if(playing) {
+        DrawFullCircuit(ctx, false, false, true, false, 2);
+      } else {
+        DrawFullCircuit(ctx, false, false, true, false, 1);
+      }
       DrawCurrent(ctx, width * 0.7, height * 0.2, 5, width * 0.1, audio::get_current(), false);
       break;
     }
