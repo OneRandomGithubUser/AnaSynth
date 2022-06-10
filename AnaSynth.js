@@ -7241,10 +7241,10 @@ function invoke_viiiiii(index,a1,a2,a3,a4,a5,a6) {
   }
 }
 
-function invoke_vidddddi(index,a1,a2,a3,a4,a5,a6,a7) {
+function invoke_d(index) {
   var sp = stackSave();
   try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
+    return getWasmTableEntry(index)();
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7252,10 +7252,10 @@ function invoke_vidddddi(index,a1,a2,a3,a4,a5,a6,a7) {
   }
 }
 
-function invoke_d(index) {
+function invoke_vidddddi(index,a1,a2,a3,a4,a5,a6,a7) {
   var sp = stackSave();
   try {
-    return getWasmTableEntry(index)();
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;

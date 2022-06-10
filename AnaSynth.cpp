@@ -147,6 +147,11 @@ namespace audio
       return 0;
     }
   }
+  double get_example_current()
+  {
+    // always playes a 440 Hz sound at a volume of 1 and slows it down by a factor of 1,000 (performace.now() is in milliseconds)
+    return sin(2*pi*440*(emscripten::val::global("performance").call<emscripten::val>("now").as<double>()/1000)/1000);
+  }
   double get_time_constant()
   {
     return TIME_CONSTANT;
@@ -390,7 +395,11 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("stroke");
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", width*0.3+25, height*0.5);
-  ctx.call<void>("lineTo", width*0.3+25+14, height*0.5-14);
+  if (audio::get_playing()) {
+    ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.5);
+  } else {
+    ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.5 - 20);
+  }
   ctx.call<void>("stroke");
   ctx.set("fillStyle", emscripten::val("black"));
   ctx.call<void>("beginPath");
@@ -426,6 +435,8 @@ void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double
     ctx.call<void>("moveTo", x + arrowLength + spacing/2.0, y + spacing/2.0);
     ctx.call<void>("lineTo", x + arrowLength, y + spacing);
     ctx.call<void>("lineTo", x + arrowLength + spacing/2.0, y + 3*spacing/2.0);
+  } else {
+    ctx.call<void>("fillText", emscripten::val("0"), x, y + spacing);
   }
   ctx.call<void>("stroke");
   if (highlight)
@@ -573,7 +584,7 @@ void RenderCanvas()
       ctx.call<void>("beginPath");
       ctx.call<void>("moveTo", width * 0.2, height * 0.5);
       // NOTE: this assumes a frame rate of 60 fps. Could change, but later. TODO
-      double current = sin(audio::get_time_constant()*FRAME_COUNT/60);
+      double current = audio::get_example_current();
       ctx.call<void>("translate", emscripten::val(0), emscripten::val(centralThickness/4.0*current));
       ctx.call<void>("lineTo", width * 0.5 - centralThickness/2.0, height * 0.5);
       ctx.call<void>("moveTo", width * 0.5 + centralThickness/2.0, height * 0.5);
@@ -615,7 +626,7 @@ void RenderCanvas()
       double width = canvas["width"].as<double>();
       double height = canvas["height"].as<double>();
       DrawFullCircuit(ctx, false, false, true, false);
-      DrawCurrent(ctx, width * 0.7, height * 0.2, 5, width * 0.1, audio::get_current(), false);
+      DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, audio::get_current(), false);
       break;
     }
     default:
