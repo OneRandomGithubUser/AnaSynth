@@ -14,16 +14,6 @@ const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
 
-
-extern "C"
-{
-EMSCRIPTEN_KEEPALIVE
-void SelectPage(int i)
-{
-  page = i;
-}
-}
-
 namespace audio
 {
   static emscripten::val globalAudioContext = emscripten::val::global("AudioContext");
@@ -365,9 +355,163 @@ void RenderCanvas()
   FRAME_COUNT++;
 }
 
+void addPlayButton(emscripten::val sidebar)
+{
+  emscripten::val playButton = document.call<emscripten::val>("createElement", emscripten::val("button"));
+  playButton.set("className", emscripten::val("button"));
+  playButton.set("id", emscripten::val("play"));
+  playButton.set("innerHTML", emscripten::val("PLAY"));
+  sidebar.call<void>("appendChild", playButton);
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
+}
+
+void addNextButton(emscripten::val sidebar)
+{
+  emscripten::val nextButton = document.call<emscripten::val>("createElement", emscripten::val("button"));
+  nextButton.set("className", emscripten::val("button"));
+  nextButton.set("id", emscripten::val("next"));
+  nextButton.set("innerHTML", emscripten::val("NEXT"));
+  sidebar.call<void>("appendChild", nextButton);
+  document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
+}
+
+emscripten::val addInputField(const char* id) 
+{
+  emscripten::val field = document.call<emscripten::val>("createElement", emscripten::val("input"));
+  field.set("id", emscripten::val(id));
+  field.set("type", emscripten::val("number"));
+  return field;
+}
+
+emscripten::val addInputField(const char* id, bool disabled) 
+{
+  emscripten::val field = document.call<emscripten::val>("createElement", emscripten::val("input"));
+  field.set("id", emscripten::val(id));
+  field.set("type", emscripten::val("number"));
+  field.set("disabled", emscripten::val(disabled));
+  return field;
+}
+
+void addBr(emscripten::val sidebar) {
+  sidebar.call<void>("appendChild", document.call<emscripten::val>("createElement", emscripten::val("br")));
+}
+
+void addP(emscripten::val sidebar, const char* s) {
+  emscripten::val p = document.call<emscripten::val>("createElement", emscripten::val("p"));
+  p.set("innerHTML", s);
+  sidebar.call<void>("appendChild", p);
+}
+
+void addLabel(emscripten::val sidebar, const char* f, const char* s) {
+  emscripten::val l = document.call<emscripten::val>("createElement", emscripten::val("label"));
+  l.set("htmlFor", f);
+  l.set("innerHTML", s);
+  sidebar.call<void>("appendChild", l);
+}
+
+void InitPage(int i)
+{
+  emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
+  sidebar.set("innerHTML", "");
+  switch(i)
+  {
+    case(0):
+      addNextButton(sidebar);
+      break;
+    case(1):
+    {
+      emscripten::val lValue = addInputField("lValue");
+      emscripten::val rValue = addInputField("rValue");
+      emscripten::val tValue = addInputField("tValue", true);
+
+      addLabel(sidebar, "lValue", "L = ");
+      sidebar.call<emscripten::val>("appendChild", lValue);
+      addLabel(sidebar, "lValue", "F");
+      addBr(sidebar);
+      addBr(sidebar);
+      addLabel(sidebar, "rValue", "R = ");
+      sidebar.call<emscripten::val>("appendChild", rValue);
+      addLabel(sidebar, "rValue", "&#8486");
+      addBr(sidebar);
+      addBr(sidebar);
+      addLabel(sidebar, "tValue", "&#120591 = ");
+      sidebar.call<emscripten::val>("appendChild", tValue);
+      addLabel(sidebar, "tValue", "s");
+      addPlayButton(sidebar);
+      break;
+    }
+    case(2):
+      addNextButton(sidebar);
+      break;
+    case(3):
+      addPlayButton(sidebar);
+      addNextButton(sidebar);
+      break;
+    case(4):
+      addNextButton(sidebar);
+      break;
+    case(5):
+      addPlayButton(sidebar);
+      addNextButton(sidebar);
+      break;
+    case(6):
+      addPlayButton(sidebar);
+      addNextButton(sidebar);
+      break;
+    default:
+      printf("page out of range\n");
+      break;
+  }
+}
+
+void RenderSidebar()
+{
+  switch(page)
+  {
+    case(0):
+      break;
+    case(1):
+    {
+      emscripten::val inductor = document.call<emscripten::val>("getElementById", emscripten::val("lValue"));
+      emscripten::val resistor = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
+      emscripten::val tConstant = document.call<emscripten::val>("getElementById", emscripten::val("tValue"));
+      double tV = 0;
+      if(inductor["value"].as<std::string>() != "" && resistor["value"].as<std::string>() != "") {
+        tV = 2 * stod(inductor["value"].as<std::string>()) / stod(resistor["value"].as<std::string>());
+        tConstant.set("value", emscripten::val(tV));
+      }
+      
+      emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
+      emscripten::val next = document.call<emscripten::val>("getElementById", emscripten::val("next"));
+      if(next == emscripten::val::null() && tV > 1) {
+        addNextButton(sidebar);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 void Render()
 {
   RenderCanvas();
+  RenderSidebar();
+}
+
+extern "C"
+{
+EMSCRIPTEN_KEEPALIVE
+void SelectPage(int i)
+{
+  page = i;
+  InitPage(page);
+}
+void NextPage(emscripten::val event)
+{
+  page++;
+  InitPage(page);
+}
 }
 
 int main() {
@@ -387,7 +531,6 @@ int main() {
   canvas.set("height", emscripten::val(window["innerHeight"].as<double>() - 80));
   ctx.set("fillStyle", emscripten::val("white"));
   window.call<void>("addEventListener", emscripten::val("resize"), emscripten::val::module_property("ResizeCanvas"));
-  document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
@@ -400,6 +543,7 @@ EMSCRIPTEN_BINDINGS(bindings)
   emscripten::function("InteractWithCanvas", InteractWithCanvas);
   emscripten::function("ResizeCanvas", ResizeCanvas);
   emscripten::function("SelectPage", SelectPage);
+  emscripten::function("NextPage", NextPage);
   emscripten::function("VolumeControl", audio::volume_control);
   emscripten::function("PlayOrPauseSound", PlayOrPauseSound);
 }

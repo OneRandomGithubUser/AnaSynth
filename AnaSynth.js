@@ -2987,6 +2987,12 @@ var ASM_CONSTS = {
     }
 
 
+  function __emval_equals(first, second) {
+      first = Emval.toValue(first);
+      second = Emval.toValue(second);
+      return first == second;
+    }
+
   function emval_get_global() {
       if (typeof globalThis == 'object') {
         return globalThis;
@@ -6935,6 +6941,7 @@ var asmLibraryArg = {
   "_emval_call_method": __emval_call_method,
   "_emval_call_void_method": __emval_call_void_method,
   "_emval_decref": __emval_decref,
+  "_emval_equals": __emval_equals,
   "_emval_get_global": __emval_get_global,
   "_emval_get_method_caller": __emval_get_method_caller,
   "_emval_get_module_property": __emval_get_module_property,
@@ -6958,6 +6965,7 @@ var asmLibraryArg = {
   "getTempRet0": _getTempRet0,
   "invoke_dd": invoke_dd,
   "invoke_di": invoke_di,
+  "invoke_dii": invoke_dii,
   "invoke_diii": invoke_diii,
   "invoke_fiii": invoke_fiii,
   "invoke_i": invoke_i,
@@ -7056,10 +7064,10 @@ var ___cxa_can_catch = Module["___cxa_can_catch"] = createExportWrapper("__cxa_c
 var ___cxa_is_pointer_type = Module["___cxa_is_pointer_type"] = createExportWrapper("__cxa_is_pointer_type");
 
 /** @type {function(...*):?} */
-var dynCall_viijii = Module["dynCall_viijii"] = createExportWrapper("dynCall_viijii");
+var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
 
 /** @type {function(...*):?} */
-var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
+var dynCall_viijii = Module["dynCall_viijii"] = createExportWrapper("dynCall_viijii");
 
 /** @type {function(...*):?} */
 var dynCall_jiiii = Module["dynCall_jiiii"] = createExportWrapper("dynCall_jiiii");
@@ -7243,6 +7251,17 @@ function invoke_viiiiiii(index,a1,a2,a3,a4,a5,a6,a7) {
   var sp = stackSave();
   try {
     getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_dii(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;

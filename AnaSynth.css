@@ -9,8 +9,15 @@ canvas {
 }
 
 div {
-    padding: 10px;
+    padding: 20px;
     box-sizing: border-box;
+}
+
+label {
+    display: inline-block;
+    width: 30px;
+    text-align: right;
+    margin-right: 5px;
 }
 
 #sidebar {
@@ -79,6 +86,13 @@ div {
 #play {
     bottom: 15px;
     left: 20%;
+    right: 60%;
+    height: 50px;
+}
+
+#next {
+    bottom: 15px;
+    left: 60%;
     right: 20%;
     height: 50px;
 }
