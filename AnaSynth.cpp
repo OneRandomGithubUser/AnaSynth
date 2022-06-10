@@ -230,7 +230,7 @@ void DrawCapacitor(emscripten::val ctx, int x, int y, bool highlight) {
   ctx.call<void>("stroke");
   if (highlight)
   {
-    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("strokeStyle", emscripten::val("black"));
     ctx.set("lineWidth", emscripten::val(1));
   }
 }
@@ -418,6 +418,7 @@ void RenderCanvas()
   gradient.call<void>("addColorStop", emscripten::val(1), emscripten::val("#" + temp));
   ctx.set("fillStyle", gradient);
   ctx.call<void>("fillRect", 0, 0, canvas["width"], canvas["height"]);
+  ctx.set("fillStyle", emscripten::val("black"));
   switch(page)
   {
     case 0:
@@ -445,8 +446,77 @@ void RenderCanvas()
     case 3:
       DrawFullCircuit(ctx, true, true, false, false);
       break;
-    case 4:
+    case 4: {
+      double width = canvas["width"].as<double>();
+      double height = canvas["height"].as<double>();
+      // these are in pixels
+      static int thickness = 30;
+      static int centralThickness = 60;
+      static int solenoidSpacing = 4;
+      static int solenoidThickness = 80;
+      ctx.call<void>("beginPath");
+      ctx.call<void>("moveTo", width * 0.2, height * 0.5 - width * 0.15);
+      ctx.call<void>("lineTo", width * 0.2, height * 0.5 + width * 0.15);
+      ctx.call<void>("lineTo", width * 0.8, height * 0.5 + width * 0.15);
+      ctx.call<void>("lineTo", width * 0.8, height * 0.5 - width * 0.15);
+      ctx.call<void>("closePath");
+      ctx.call<void>("stroke");
+      ctx.call<void>("beginPath");
+      ctx.call<void>("moveTo", width * 0.2, height * 0.5 - width * 0.15);
+      ctx.call<void>("lineTo", 0, height * 0.5 - width * 0.35);
+      ctx.call<void>("moveTo", width * 0.8, height * 0.5 - width * 0.15);
+      ctx.call<void>("lineTo", width, height * 0.5 - width * 0.35);
+      ctx.call<void>("moveTo", width * 0.2, height * 0.5);
+      ctx.call<void>("lineTo", 0, height * 0.5);
+      ctx.call<void>("moveTo", width * 0.8, height * 0.5);
+      ctx.call<void>("lineTo", width, height * 0.5);
+      ctx.call<void>("stroke");
+      ctx.call<void>("beginPath");
+      ctx.call<void>("moveTo", width * 0.5 - centralThickness/2.0, height * 0.5 - thickness/2);
+      ctx.call<void>("lineTo", width * 0.5 - centralThickness/2.0, height * 0.5 + width * 0.15 - thickness*2);
+      ctx.call<void>("lineTo", width * 0.2 + thickness*2.0, height * 0.5 + width * 0.15 - thickness*2);
+      ctx.call<void>("lineTo", width * 0.2 + thickness*2.0, height * 0.5 + thickness/2);
+      ctx.call<void>("lineTo", width * 0.2 + thickness, height * 0.5 + thickness/2);
+      ctx.call<void>("lineTo", width * 0.2 + thickness, height * 0.5 + width * 0.15 - thickness);
+      ctx.call<void>("lineTo", width * 0.8 - thickness, height * 0.5 + width * 0.15 - thickness);
+      ctx.call<void>("lineTo", width * 0.8 - thickness, height * 0.5 + thickness/2);
+      ctx.call<void>("lineTo", width * 0.8 - thickness*2.0, height * 0.5 + thickness/2);
+      ctx.call<void>("lineTo", width * 0.8 - thickness*2.0, height * 0.5 + width * 0.15 - thickness*2);
+      ctx.call<void>("lineTo", width * 0.5 + centralThickness/2.0, height * 0.5 + width * 0.15 - thickness*2);
+      ctx.call<void>("lineTo", width * 0.5 + centralThickness/2.0, height * 0.5 - thickness/2);
+      ctx.call<void>("closePath");
+      ctx.call<void>("stroke");
+      ctx.call<void>("beginPath");
+      ctx.call<void>("moveTo", width * 0.2, height * 0.5);
+      ctx.call<void>("lineTo", width * 0.5 - centralThickness/2.0, height * 0.5);
+      ctx.call<void>("moveTo", width * 0.5 + centralThickness/2.0, height * 0.5);
+      ctx.call<void>("lineTo", width * 0.5 + solenoidThickness/2.0, height * 0.5);
+      double tempY = height * 0.5 + solenoidSpacing;
+      while (tempY < height * 0.5 + width * 0.15 - thickness*2.5)
+      {
+        ctx.call<void>("lineTo", width * 0.5 - solenoidThickness/2.0, tempY - solenoidSpacing/2.0);
+        ctx.call<void>("lineTo", width * 0.5 - centralThickness/2.0, tempY + centralThickness/(2.0*solenoidThickness)*(solenoidSpacing/2.0) - solenoidSpacing/2.0);
+        ctx.call<void>("moveTo", width * 0.5 + centralThickness/2.0, tempY - centralThickness/(2.0*solenoidThickness)*(solenoidSpacing/2.0));
+        ctx.call<void>("lineTo", width * 0.5 + solenoidThickness/2.0, tempY);
+        tempY += solenoidSpacing;
+      }
+      ctx.call<void>("lineTo", width * 0.8 - thickness*2.5, height * 0.5);
+      ctx.call<void>("lineTo", width * 0.8, height * 0.5);
+      ctx.call<void>("stroke");
+      ctx.call<void>("beginPath");
+      ctx.set("lineWidth", emscripten::val(2));
+      ctx.call<void>("moveTo", width * 0.95, height * 0.5 - width * 0.3);
+      ctx.call<void>("lineTo", width * 0.5 + solenoidThickness/2.0, height * 0.5);
+      ctx.call<void>("lineTo", width * 0.5 - solenoidThickness/2.0, height * 0.5);
+      ctx.call<void>("lineTo", width * 0.05, height * 0.5 - width * 0.3);
+      ctx.call<void>("stroke");
+      ctx.call<void>("beginPath");
+      ctx.set("lineWidth", emscripten::val(1));
+      ctx.call<void>("fillText", emscripten::val("S"), width * 0.5, height * 0.5 + width * 0.15 - thickness*1.5);
+      ctx.call<void>("fillText", emscripten::val("N"), width * 0.2 + thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
+      ctx.call<void>("fillText", emscripten::val("N"), width * 0.8 - thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
       break;
+    }
     case 5:
       DrawFullCircuit(ctx, false, false, false, true);
       break;
@@ -638,6 +708,9 @@ int main() {
   canvas.set("height", emscripten::val(window["innerHeight"].as<double>() - 80));
   ctx.set("fillStyle", emscripten::val("white"));
   window.call<void>("addEventListener", emscripten::val("resize"), emscripten::val::module_property("ResizeCanvas"));
+  ctx.set("textAlign", emscripten::val("center"));
+  ctx.set("textBaseline", emscripten::val("middle"));
+  ctx.set("font", emscripten::val("20px Arial"));
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
