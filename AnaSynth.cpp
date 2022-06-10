@@ -5,10 +5,13 @@
 #include <iostream>
 #include <numbers>
 #include <cmath>
+#include <vector>
+#include <optional>
 
 emscripten::val window = emscripten::val::global("window");
 emscripten::val document = emscripten::val::global("document");
 const double pi = std::numbers::pi;
+const double e = std::numbers::e;
 static int page;
 
 
@@ -21,12 +24,159 @@ void SelectPage(int i)
 }
 }
 
+namespace audio
+{
+  static emscripten::val globalAudioContext = emscripten::val::global("AudioContext");
+  static std::vector<emscripten::val> oscillators;
+  // audioContext is allowed to start only after user interactions, so this must only be created when initialized
+  static std::optional<emscripten::val> audioContext;
+  static std::optional<emscripten::val> gainNode;
+  static std::optional<emscripten::val> volumeManager;
+  static double TIME_CONSTANT = 1.5; // in seconds
+  static double beginTime = 0.0;
+  static bool initialized = false;
+  static bool playing = false;
+  static double initialVolume = 1.5;
+  static int timeConstants = 0;
+  /*
+  class rlc
+  {
+  private:
+    double frequency;
+    double timeConstant;
+    double initialVolume;
+    emscripten::val gainNode;
+    emscripten::val volumeManager;
+    emscripten::val oscillator;
+    bool playing;
+  public:
+    rlc(double frequency, double timeConstant, double intialVolume)
+    {
+      this->frequency = frequency;
+      this->timeConstant = timeConstant;
+      this->initialVolume = initialVolume;
+      gainNode = audio::audioContext->call<emscripten::val>("createGain");
+      gainNode.call<void>("connect", audio::audioContext.value()["destination"]);
+      oscillator = audioContext.value().call<emscripten::val>("createOscillator");
+      oscillator.set("type", emscripten::val("sine"));
+      oscillator["frequency"].set("value", emscripten::val(frequency));
+      oscillators.emplace_back(oscillator);
+      oscillator.call<void>("start");
+      playing = false;
+    }
+    void play_or_pause()
+    {
+      if (playing)
+      {
+        // pause it
+        playing = false;
+      } else {
+        // play it
+        playing = true;
+      }
+    }
+  };*/
+  void initialize()
+  {
+    // because you cannot create audioContext until user interaction with the page, a rule enforced by browsers
+    if (!initialized)
+    {
+      emscripten::val baseAudioContext = globalAudioContext.new_();
+      audioContext.emplace(baseAudioContext);
+      gainNode.emplace(audioContext.value().call<emscripten::val>("createGain"));
+      gainNode.value().call<void>("connect", audioContext.value()["destination"]); // connect gainNode to audio output
+    }
+    initialized = true;
+  }
+  void set_vars(std::vector<double>& frequencies, double startingVolume, double timeConstant)
+  {
+    if (!initialized)
+    {
+      // This function can be called ONLY after audio::initialize() is called
+      // emscripten currently does not have much support for throwing std::exception
+      std::cout << "Error: audio::set_vars() called before audio::initialize()\n";
+    }
+    for (auto &frequency: frequencies) {
+      emscripten::val oscillator = audioContext.value().call<emscripten::val>("createOscillator");
+      oscillator.set("type", emscripten::val("sine"));
+      oscillator["frequency"].set("value", emscripten::val(frequency));
+      oscillators.emplace_back(oscillator);
+      oscillator.call<void>("start");
+    }
+    initialVolume = startingVolume;
+    TIME_CONSTANT = timeConstant;
+  }
+  void volume_control()
+  {
+    if (audioContext.has_value() && gainNode.has_value())
+    {
+      // time after play() in seconds. add one TIME_CONSTANT since this is the time at the end of the exponentialRampToValueAtTime
+      double offsetTime = audioContext.value()["currentTime"].as<double>() - beginTime;
+      if (round(offsetTime/TIME_CONSTANT) == timeConstants)
+      {
+        timeConstants = round(offsetTime/TIME_CONSTANT) + 1;
+        if (pow(e, -timeConstants) > 2*pow(10,-45)) // can't exponentialRampToValueAtTime to 0 if timeConstants is too high
+         {
+          std::cout << offsetTime << " sec to " << offsetTime+TIME_CONSTANT << " sec: decrease to volume of " << 100*pow(e, -timeConstants) << "% (e^-" << timeConstants << ") from volume " << gainNode.value()["gain"]["value"].as<double>() << " at " << timeConstants << " time constants\n";
+          gainNode.value()["gain"].call<void>("setValueAtTime", gainNode.value()["gain"]["value"], audioContext.value()["currentTime"]);
+          gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
+                                                         emscripten::val(initialVolume * pow(e, -timeConstants)),
+                                                         emscripten::val(beginTime + offsetTime + TIME_CONSTANT));
+        }
+      }
+    }
+  }
+  void play_or_pause()
+  {
+    if (!initialized)
+    {
+      // This function can be called ONLY after audio::initialize() is called
+      // emscripten currently does not have much support for throwing std::exception
+      std::cout << "Error: audio::play() called before audio::initialize()\n";
+    }
+    if (playing)
+    {
+      // pause
+      for (auto &oscillator: oscillators)
+      {
+        oscillator.call<void>("stop");
+        oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+      }
+      window.call<void>("clearInterval", volumeManager.value());
+      gainNode.value()["gain"].call<void>("cancelScheduledValues", audioContext.value()["currentTime"]);
+      timeConstants = 0;
+      playing = false;
+    } else {
+      // play
+      beginTime = audioContext.value()["currentTime"].as<double>();
+      for (auto &oscillator: oscillators) {
+        oscillator.call<void>("connect", gainNode.value()); // connect oscillator to audio output
+      }
+      std::cout << gainNode.value()["gain"]["value"].as<double>() << " " << initialVolume << "\n";
+      gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
+      std::cout << gainNode.value()["gain"]["value"].as<double>() << " " << initialVolume << "\n";
+      volume_control();
+      volumeManager.emplace(
+              window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
+                                           emscripten::val(TIME_CONSTANT * 1000)));
+      playing = true;
+    }
+  }
+}
+
 void InteractWithCanvas(emscripten::val event)
 {
   std::string eventName = event["type"].as<std::string>();
-  double pageX = event["pageX"].as<double>();
-  double pageY = event["pageY"].as<double>();
+  // double pageX = event["pageX"].as<double>();
+  // double pageY = event["pageY"].as<double>();
   // std::cout << eventName << " " << pageX << " " << pageY << "\n";
+  if (eventName == "mouseup")
+  {
+    audio::initialize();
+    std::vector<double> frequencies{261.63, 293.66, 329.63}; // C major chord
+    audio::set_vars(frequencies, 0.5, 1.5);
+    audio::play_or_pause();
+  }
 }
 
 void ResizeCanvas(emscripten::val event)
@@ -204,6 +354,12 @@ int main() {
   document.call<void>("addEventListener",
                       emscripten::val("mousemove"),
                       emscripten::val::module_property("InteractWithCanvas"));
+  document.call<void>("addEventListener",
+                      emscripten::val("mousedown"),
+                      emscripten::val::module_property("InteractWithCanvas"));
+  document.call<void>("addEventListener",
+                      emscripten::val("mouseup"),
+                      emscripten::val::module_property("InteractWithCanvas"));
 
   emscripten::val canvas = document.call<emscripten::val>("getElementById", emscripten::val("canvas"));
   emscripten::val ctx = canvas.call<emscripten::val>("getContext", emscripten::val("2d"));
@@ -214,6 +370,7 @@ int main() {
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
+  return 0;
 }
 
 
@@ -222,4 +379,5 @@ EMSCRIPTEN_BINDINGS(bindings)
   emscripten::function("InteractWithCanvas", InteractWithCanvas);
   emscripten::function("ResizeCanvas", ResizeCanvas);
   emscripten::function("SelectPage", SelectPage);
+  emscripten::function("VolumeControl", audio::volume_control);
 }
