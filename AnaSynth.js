@@ -6973,6 +6973,7 @@ var asmLibraryArg = {
   "fd_write": _fd_write,
   "getTempRet0": _getTempRet0,
   "getentropy": _getentropy,
+  "invoke_d": invoke_d,
   "invoke_dd": invoke_dd,
   "invoke_di": invoke_di,
   "invoke_dii": invoke_dii,
@@ -6996,6 +6997,7 @@ var asmLibraryArg = {
   "invoke_v": invoke_v,
   "invoke_vi": invoke_vi,
   "invoke_vid": invoke_vid,
+  "invoke_vidddddi": invoke_vidddddi,
   "invoke_vii": invoke_vii,
   "invoke_viid": invoke_viid,
   "invoke_viii": invoke_viii,
@@ -7139,7 +7141,7 @@ function invoke_viii(index,a1,a2,a3) {
   }
 }
 
-function invoke_ii(index,a1) {
+function invoke_di(index,a1) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1);
@@ -7150,7 +7152,18 @@ function invoke_ii(index,a1) {
   }
 }
 
-function invoke_di(index,a1) {
+function invoke_dd(index,a1) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_ii(index,a1) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1);
@@ -7194,17 +7207,6 @@ function invoke_viiiii(index,a1,a2,a3,a4,a5) {
   }
 }
 
-function invoke_dd(index,a1) {
-  var sp = stackSave();
-  try {
-    return getWasmTableEntry(index)(a1);
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_vii(index,a1,a2) {
   var sp = stackSave();
   try {
@@ -7231,6 +7233,28 @@ function invoke_viiiiii(index,a1,a2,a3,a4,a5,a6) {
   var sp = stackSave();
   try {
     getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_vidddddi(index,a1,a2,a3,a4,a5,a6,a7) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_d(index) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)();
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
