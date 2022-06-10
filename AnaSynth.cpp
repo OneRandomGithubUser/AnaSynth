@@ -201,26 +201,26 @@ namespace audio
     {
       emscripten::val currentTime = audioContext.value()["currentTime"];
       gainNode.value()["gain"].call<void>("cancelScheduledValues", currentTime);
-      // fade out in 0.1 seconds - doesn't actually work so, if time leftover, TODO
+      // fade out in 0.1 seconds - doesn't actually work because of disconnect so, if time leftover, TODO
       gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
                                                      emscripten::val(0.000001),
                                                      emscripten::val(currentTime.as<double>() + 0.1));
-      // pause in 0.1 seconds
       for (auto &oscillator: oscillators)
       {
-        oscillator.call<void>("stop", emscripten::val(currentTime.as<double>() + 0.1));
+        oscillator.call<void>("disconnect", gainNode.value());
       }
       window.call<void>("clearInterval", volumeManager.value());
       timeConstants = 0;
       playing = false;
     } else {
       // play
+      for (auto &oscillator: oscillators)
+      {
+        oscillator.call<void>("connect", gainNode.value());
+      }
       beginTime = audioContext.value()["currentTime"].as<double>();
       // mute sound then go to full volume in 0.05 seconds
-      gainNode.value()["gain"].set("value", emscripten::val(0.000001));
-      gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
-                                                     emscripten::val(initialVolume),
-                                                     emscripten::val(beginTime + 0.05));
+      gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
       volume_control();
       volumeManager.emplace(
               window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
