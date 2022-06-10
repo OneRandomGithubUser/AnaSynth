@@ -751,7 +751,7 @@ void InitializePage(int i)
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "efficiencyValue", "dB<sub>1m</sub> = ", "left-label");
+      addLabel(info, "efficiencyValue", "dB<sub style=\"font-size:60%;\">1m</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", efficiencyValue);
       addLabel(info, "efficiencyValue", "%");
       enablePlayButton();
@@ -846,9 +846,7 @@ void SelectPage(int i)
 }
 void NextPage(emscripten::val event)
 {
-  page++;
-  InitializePage(page);
-  StoreData(page);
+  SelectPage(++page);
 }
 }
 
