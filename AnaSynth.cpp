@@ -234,6 +234,12 @@ void PlayOrPauseSound(emscripten::val event)
 {
   audio::initialize();
   audio::play_or_pause();
+  emscripten::val play = document.call<emscripten::val>("getElementById", emscripten::val("play"));
+  if(audio::get_playing()) {
+    play.set("innerHTML", "PAUSE");
+  } else {
+    play.set("innerHTML", "PLAY");
+  }
 }
 
 void InteractWithCanvas(emscripten::val event)
@@ -399,6 +405,20 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
     ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.5);
   } else {
     ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.5 - 20);
+/*
+  switch(position) {
+    case(0):
+      ctx.call<void>("lineTo", width*0.3+25+14, height*0.5-14);
+      break;
+    case(1):
+      ctx.call<void>("lineTo", width*0.3+25, height*0.5-20);
+      break;
+    case(2):
+      ctx.call<void>("lineTo", width*0.3+45, height*0.5);
+      break;
+    default:
+      break;
+*/
   }
   ctx.call<void>("stroke");
   ctx.set("fillStyle", emscripten::val("black"));
@@ -625,8 +645,8 @@ void RenderCanvas()
     case 6: {
       double width = canvas["width"].as<double>();
       double height = canvas["height"].as<double>();
-      DrawFullCircuit(ctx, false, false, true, false);
       DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, audio::get_current(), false);
+      DrawFullCircuit(ctx, false, false, true, false);
       break;
     }
     default:
