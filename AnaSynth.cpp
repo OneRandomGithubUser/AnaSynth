@@ -88,10 +88,6 @@ namespace audio
         oscillator["frequency"].set("value", emscripten::val(frequency));
         oscillators.emplace_back(oscillator);
       }
-      // connect oscillators to audio output
-      for (auto &oscillator: oscillators) {
-        oscillator.call<void>("connect", gainNode.value());
-      }
       // start the oscillators together
       for (auto &oscillator: oscillators) {
         oscillator.call<void>("start");
@@ -141,6 +137,20 @@ namespace audio
       for (auto& frequency : _frequencies)
       {
         temp += sin(2*pi*frequency*(audioContext.value()["currentTime"].as<double>() - beginTime));
+      }
+      return get_current_volume() * temp;
+    } else {
+      return 0;
+    }
+  }
+  double get_slowed_current()
+  {
+    if (playing)
+    {
+      double temp = 0.0;
+      for (auto& frequency : _frequencies)
+      {
+        temp += sin(2*pi*frequency*(audioContext.value()["currentTime"].as<double>() - beginTime)/100);
       }
       return get_current_volume() * temp;
     } else {
@@ -228,11 +238,28 @@ namespace audio
       playing = true;
     }
   }
+  double watts_to_decibels(double power, double distance)
+  {
+    // assumes Normal Temperature and Pressure, aka 20 degrees Celsius,	101.325 kPa
+    // here, air density is 1.2923 kg/m^3 and the speed of sound is 343 m/s
+    // assumes reference sound pressure (human hearing threshold) is 20 μPa
+    // also assumes the listener's eardrums are perfectly perpendicular to the sound
+    double soundPressure = sqrt((power*1.2923*343)/(4*pi*distance*distance));
+    return 20*log10(soundPressure/(20*pow(10,-6)));
+  }
+  double decibels_to_watts(double soundPressureLevel, double distance)
+  {
+    // assumes Normal Temperature and Pressure, aka 20 degrees Celsius,	101.325 kPa
+    // here, air density is 1.2923 kg/m^3 and the speed of sound is 343 m/s
+    // assumes reference sound pressure (human hearing threshold) is 20 μPa
+    // also assumes the listener's eardrums are perfectly perpendicular to the sound
+    double soundPressure = pow(10, soundPressureLevel/20) * 20*pow(10,-6);
+    return (4*pi*distance*distance*pow(soundPressure,2))/(1.2923*343);
+  }
 }
 
 void PlayOrPauseSound(emscripten::val event)
 {
-  audio::initialize();
   audio::play_or_pause();
   emscripten::val play = document.call<emscripten::val>("getElementById", emscripten::val("play"));
   if(audio::get_playing()) {
@@ -373,7 +400,7 @@ void DrawBattery(emscripten::val ctx, int x, int y, bool highlight) {
 
 void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
   double width = ctx["canvas"]["width"].as<double>();
-  double height = ctx["canvas"]["width"].as<double>();
+  double height = ctx["canvas"]["height"].as<double>();
   DrawCapacitor(ctx, width*0.3, height*0.5, highlightCapacitor);
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", width*0.3+25+20, height*0.5);
@@ -423,17 +450,17 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("stroke");
   ctx.set("fillStyle", emscripten::val("black"));
   ctx.call<void>("beginPath");
-  ctx.call<void>("arc", height*0.3+25, height*0.5, 2, 0, 2*pi);
+  ctx.call<void>("arc", width*0.3+25, height*0.5, 2, 0, 2*pi);
   ctx.call<void>("fill");
   ctx.call<void>("beginPath");
-  ctx.call<void>("arc", height*0.3+25, height*0.5-20, 2, 0, 2*pi);
+  ctx.call<void>("arc", width*0.3+25, height*0.5-20, 2, 0, 2*pi);
   ctx.call<void>("fill");
   ctx.call<void>("beginPath");
-  ctx.call<void>("arc", height*0.3+45, height*0.5, 2, 0, 2*pi);
+  ctx.call<void>("arc", width*0.3+45, height*0.5, 2, 0, 2*pi);
   ctx.call<void>("fill");
 }
 
-void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, bool highlight)
+void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, std::string label, bool highlight)
 {
   // NOTE: this must be placed on a TOP edge, also this assumes 60 fps TODO
   if (highlight)
@@ -441,7 +468,14 @@ void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double
     ctx.set("strokeStyle", emscripten::val("#00BFFF"));
     ctx.set("lineWidth", emscripten::val(3));
   }
-  ctx.call<void>("fillText", emscripten::val("CURRENT"), x, y - spacing - ctx.call<emscripten::val>("measureText", emscripten::val("CURRENT"))["actualBoundingBoxDescent"].as<double>());
+  double labelDescent = ctx.call<emscripten::val>("measureText", emscripten::val(label))["actualBoundingBoxDescent"].as<double>();
+  double labelAscent = ctx.call<emscripten::val>("measureText", emscripten::val(label))["actualBoundingBoxAscent"].as<double>();
+  ctx.call<void>("fillText", emscripten::val(label), x, y - spacing - labelDescent);
+  ctx.call<void>("fillText", emscripten::val("CURRENT"), x, y - spacing - labelDescent - labelAscent - spacing -
+                                                        ctx.call<emscripten::val>("measureText",
+                                                                                  emscripten::val(
+                                                                                          "CURRENT"))["actualBoundingBoxDescent"].as<double>());
+
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", x, y + spacing);
   double arrowLength = audio::get_initial_volume() * pixelsAtVolume1 * current;
@@ -456,7 +490,9 @@ void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double
     ctx.call<void>("lineTo", x + arrowLength, y + spacing);
     ctx.call<void>("lineTo", x + arrowLength + spacing/2.0, y + 3*spacing/2.0);
   } else {
-    ctx.call<void>("fillText", emscripten::val("0"), x, y + spacing);
+    ctx.call<void>("fillText", emscripten::val("0"), x, y + spacing + ctx.call<emscripten::val>("measureText",
+                                                                                             emscripten::val(
+                                                                                                     "0"))["actualBoundingBoxAscent"].as<double>());
   }
   ctx.call<void>("stroke");
   if (highlight)
@@ -636,7 +672,7 @@ void RenderCanvas()
       ctx.call<void>("fillText", emscripten::val("S"), width * 0.5, height * 0.5 + width * 0.15 - thickness*1.5);
       ctx.call<void>("fillText", emscripten::val("N"), width * 0.2 + thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
       ctx.call<void>("fillText", emscripten::val("N"), width * 0.8 - thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
-      DrawCurrent(ctx, width*0.1, height*0.5, 10, width * 0.05, current, false);
+      DrawCurrent(ctx, width*0.1, height*0.5, 10, width * 0.1, current, "(SLOWED 1000x)", false);
       break;
     }
     case 5:
@@ -645,7 +681,8 @@ void RenderCanvas()
     case 6: {
       double width = canvas["width"].as<double>();
       double height = canvas["height"].as<double>();
-      DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, audio::get_current(), false);
+      DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1, audio::get_slowed_current(), "(SLOWED 100x)", false);
+      DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, audio::get_current(), "(REAL TIME)", false);
       DrawFullCircuit(ctx, false, false, true, false);
       break;
     }
@@ -721,7 +758,7 @@ emscripten::val addInputField(const char* id, bool disabled, double step, double
   return field;
 }
 
-emscripten::val addInputField(const char* id, bool disabled, double step)
+emscripten::val addInputField(std::string id, bool disabled, double step)
 {
   emscripten::val field = document.call<emscripten::val>("createElement", emscripten::val("input"));
   field.set("id", emscripten::val(id));
@@ -735,20 +772,20 @@ void addBreak(emscripten::val sidebar) {
   sidebar.call<void>("appendChild", document.call<emscripten::val>("createElement", emscripten::val("br")));
 }
 
-void addParagraph(emscripten::val sidebar, const char* s) {
+void addParagraph(emscripten::val sidebar, std::string s) {
   emscripten::val p = document.call<emscripten::val>("createElement", emscripten::val("p"));
   p.set("innerHTML", s);
   sidebar.call<void>("appendChild", p);
 }
 
-void addLabel(emscripten::val sidebar, const char* f, const char* s) {
+void addLabel(emscripten::val sidebar, std::string f, std::string s) {
   emscripten::val l = document.call<emscripten::val>("createElement", emscripten::val("label"));
   l.set("htmlFor", f);
   l.set("innerHTML", s);
   sidebar.call<void>("appendChild", l);
 }
 
-void addLabel(emscripten::val sidebar, const char* f, const char* s, const char* c) {
+void addLabel(emscripten::val sidebar, std::string f, std::string s, std::string c) {
   emscripten::val l = document.call<emscripten::val>("createElement", emscripten::val("label"));
   l.set("htmlFor", f);
   l.set("className", c);
@@ -777,10 +814,10 @@ void InitializePage(int i)
       addParagraph(info, "The time constant, &#120591, of this system is given by the equation");
       addParagraph(info, "&#120591 = 2L/R");
       addParagraph(info,
-                   "After one time constant, the volume of the sound will be e^-1 of its original volume, or about 36.7879% of its original volume.");
+                   "After one time constant, the volume of the sound will be e^-1 of its original volume, or about 36.79% of its original volume.");
       addParagraph(info,
-                   "After two time constants, the volume of the sound will be e^-2 of its original volume, or about 13.5335% of its original volume.");
-      addParagraph(info, "Three time constants will have a volume of 4.97871%, four will have 1.83156%, and so on.");
+                   "After two time constants, the volume of the sound will be e^-2 of its original volume, or about 13.53% of its original volume.");
+      addParagraph(info, "Three time constants will have a volume of 4.98%, four will have 1.83%, and so on.");
       addParagraph(info,
                    "We want to hear the sound that we make! So let's give the sound a reasonable time constant of at least 1 second.");
       addParagraph(info, "The resistance of the speaker is already given to us.");
@@ -830,7 +867,10 @@ void InitializePage(int i)
       addParagraph(info, "and attracts or repels the magnet that the solenoid is wrapped around.");
       addParagraph(info,
                    "As the solenoid, which is free floating, pulsates away and towards the magnet, it pulls along the speaker cone attached to it, creating alternating waves of low and high air pressure, which we hear as sound");
-      addParagraph(info, "The conversion of electrical energy to heat and sound is why a speaker has a resistance.");
+      addParagraph(info, "To be more specific, by the right hand rule, when the current moves to the right across the speaker, magnetic field points down, so it acts like a magnet with north pointing downwards and attracts to the permanent magnet's south pole and pulls the speaker cone down.");
+      addParagraph(info, "Similarly, when the current points to the left, magnetic field points up and pushes the speaker cone up.");
+      addParagraph(info, "The conversion of electrical energy to heat and sound is why a speaker has a resistance as energy cannot be created by the first law of thermodynamics.");
+      addParagraph(info, "In this example here, the speaker is vibrating at 440 Hz, the \"Concert A\" note. To more clearly see it, time is slowed by a factor of 1000.");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
@@ -839,10 +879,21 @@ void InitializePage(int i)
       enableNextButton();
       break;
     case (5): {
+      std::string perfectlyEfficient = std::to_string(audio::watts_to_decibels(1, 1));
+      std::string extraordinarilyEfficient = std::to_string(audio::decibels_to_watts(105, 1) * 100) + "%";
+      std::string veryEfficient = std::to_string(audio::decibels_to_watts(95, 1) * 100) + "%";
+      std::string average = std::to_string(audio::decibels_to_watts(88, 1) * 100) + "%";
+      std::string veryInefficient = std::to_string(audio::decibels_to_watts(85, 1) * 100) + "%";
       emscripten::val rValue = addInputField("rValue", false, 0.1, 0);
-      emscripten::val efficiencyValue = addInputField("efficiencyValue", false, 0.01, 0, 100, 0.1);
+      emscripten::val efficiencyValue = addInputField("efficiencyValue", true, 0.1, 0, 109.453876, 88);
+      emscripten::val sensitivityValue = addInputField("sensitivityValue", false, 0.1, 0, 109.453876, 88);
       addParagraph(info, "Now, we give you the freedom to manipulate the statistics of the speaker.");
-      addParagraph(info, "A very efficient speaker has an efficiency of about 0.3%.");
+      addParagraph(info, "Speaker sensitivity, which is a measure of the efficiency of a speaker, is often measured as the volume of the sound from a distance of 1 meter when 1 watt is passed through it.");
+      addParagraph(info, "A perfectly efficient speaker has a sensitivity of " + perfectlyEfficient + "dB. Real world speakers have quite a range of efficiencies:");
+      addParagraph(info, "Extraordinarily efficient speaker: 105 dB (" + extraordinarilyEfficient + " efficiency)");
+      addParagraph(info, "Very efficient speaker: 95 dB (" + veryEfficient + " efficiency)");
+      addParagraph(info, "Average efficiency speaker: 88 dB (" + average + " efficiency)");
+      addParagraph(info, "Very inefficient speaker: 85 dB (" + veryInefficient + " efficiency)");
       addParagraph(info,
                    "Note that manipulating the values of the speaker may cause values entered in previously to become invalid.");
       addLabel(info, "rValue", "R = ", "left-label");
@@ -850,9 +901,14 @@ void InitializePage(int i)
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "efficiencyValue", "dB<sub style=\"font-size:60%;\">1m</sub> = ", "left-label");
+      addLabel(info, "sensitivityValue", "dB<sub style=\"font-size:60%;\">1m</sub> = ", "left-label");
+      info.call<emscripten::val>("appendChild", sensitivityValue);
+      addLabel(info, "sensitivityValue", "dB");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "efficiencyValue", "ŋ = ", "left-label");
       info.call<emscripten::val>("appendChild", efficiencyValue);
-      addLabel(info, "efficiencyValue", "%");
+      addLabel(info, "efficiencyValue", "% efficiency");
       enablePlayButton();
       enableNextButton();
       break;
@@ -913,6 +969,10 @@ void RenderSidebar()
     }
     case 5:
     {
+      emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
+      emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
+      double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
+      efficiency.set("value", emscripten::val(efficiencyValue*100));
       double initialVolume = -1;
       if (false) {
         audio::set_initial_volume(initialVolume);
@@ -929,6 +989,7 @@ void RenderSidebar()
 
 void CloseIntro(emscripten::val event) {
   document.call<emscripten::val>("getElementById", emscripten::val("blur")).call<void>("remove", emscripten::val("mouseup"));
+  audio::initialize();
 }
 
 void Render()

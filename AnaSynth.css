@@ -67,6 +67,7 @@ label {
     width: 70%;
     height: 80px;
     background: linear-gradient(90deg, orange, rgb(255, 162, 80));
+    overflow-y: auto;
 }
 
 input[type=number] {
