@@ -1037,7 +1037,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 5:
+    case 7:
     {
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
       emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
@@ -1049,7 +1049,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 6:
+    case 8:
       circuitCompleted = true;
       break;
     default:
