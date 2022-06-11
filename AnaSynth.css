@@ -58,8 +58,17 @@ label {
     top: 0;
     width: 30%;
     height: 100%;
+    padding: 0;
     color: #e3dedc;
     background: linear-gradient(20deg, #000428, #004e82);
+}
+
+#info {
+    padding-left: 32px;
+    padding-right: 32px;
+    width: 30%;
+    height: 100%;
+    overflow-y: auto;
 }
 
 #navigation {
@@ -102,6 +111,11 @@ input[type=number] {
 
 .button:disabled {
     cursor: not-allowed;
+}
+input:disabled {
+    cursor: not-allowed;
+    background: black;
+    color: #c7bdb9;
 }
 
 .selectable-button input[type="radio"],
