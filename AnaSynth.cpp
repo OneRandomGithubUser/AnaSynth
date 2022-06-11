@@ -883,7 +883,7 @@ void InitializePage(int i)
       std::string extraordinarilyEfficient = std::to_string(audio::decibels_to_watts(105, 1) * 100) + "%";
       std::string veryEfficient = std::to_string(audio::decibels_to_watts(95, 1) * 100) + "%";
       std::string average = std::to_string(audio::decibels_to_watts(88, 1) * 100) + "%";
-      std::string veryInefficient = std::to_string(audio::decibels_to_watts(85, 1) * 100) + "%";
+      std::string veryInefficient = std::to_string(audio::decibels_to_watts(83, 1) * 100) + "%";
       emscripten::val rValue = addInputField("rValue", false, 0.1, 0);
       emscripten::val efficiencyValue = addInputField("efficiencyValue", true, 0.1, 0, 109.453876, 88);
       emscripten::val sensitivityValue = addInputField("sensitivityValue", false, 0.1, 0, 109.453876, 88);
@@ -893,7 +893,7 @@ void InitializePage(int i)
       addParagraph(info, "Extraordinarily efficient speaker: 105 dB (" + extraordinarilyEfficient + " efficiency)");
       addParagraph(info, "Very efficient speaker: 95 dB (" + veryEfficient + " efficiency)");
       addParagraph(info, "Average efficiency speaker: 88 dB (" + average + " efficiency)");
-      addParagraph(info, "Very inefficient speaker: 85 dB (" + veryInefficient + " efficiency)");
+      addParagraph(info, "Very inefficient speaker: 83 dB (" + veryInefficient + " efficiency)");
       addParagraph(info,
                    "Note that manipulating the values of the speaker may cause values entered in previously to become invalid.");
       addLabel(info, "rValue", "R = ", "left-label");
