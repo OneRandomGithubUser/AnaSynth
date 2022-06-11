@@ -159,39 +159,43 @@ input[type=number] {
     bottom: 15px;
     left: 80px;
 }
-#b2a {
+#b1c {
     bottom: 15px;
     left: 145px;
 }
-#b2b {
+#b2a {
     bottom: 15px;
     left: 210px;
 }
-#b3a {
+#b2b {
     bottom: 15px;
     left: 275px;
 }
-#b3b {
+#b3a {
     bottom: 15px;
     left: 340px;
 }
-#b4a {
+#b3b {
     bottom: 15px;
     left: 405px;
 }
-#b5a {
+#b4a {
     bottom: 15px;
     left: 470px;
 }
-#b6a {
+#b5a {
     bottom: 15px;
     left: 535px;
 }
-#b6b {
+#b6a {
     bottom: 15px;
     left: 600px;
 }
-#b7a {
+#b6b {
     bottom: 15px;
     left: 665px;
+}
+#b7a {
+    bottom: 15px;
+    left: 730px;
 }

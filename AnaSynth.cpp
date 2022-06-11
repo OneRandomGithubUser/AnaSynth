@@ -594,10 +594,10 @@ void RenderCanvas()
     // case 2:
     //   std::cout << "b3" << std::endl;
     //   break;
-    case 3:
+    case 4:
       DrawFullCircuit(ctx, true, true, false, false);
       break;
-    case 4: {
+    case 5: {
       double width = canvas["width"].as<double>();
       double height = canvas["height"].as<double>();
       // these are in pixels
@@ -675,10 +675,10 @@ void RenderCanvas()
       DrawCurrent(ctx, width*0.1, height*0.5, 10, width * 0.1, current, "(SLOWED 1000x)", false);
       break;
     }
-    case 5:
+    case 6:
       DrawFullCircuit(ctx, false, false, false, true);
       break;
-    case 6: {
+    case 7: {
       double width = canvas["width"].as<double>();
       double height = canvas["height"].as<double>();
       DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1, audio::get_slowed_current(), "(SLOWED 100x)", false);
@@ -853,6 +853,14 @@ void InitializePage(int i)
       enableNextButton();
       break;
     case (3):
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
+      break;
+    case (4):
     {
       emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
       emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
@@ -880,7 +888,7 @@ void InitializePage(int i)
       enableNextButton();
       break;
     }
-    case (4):
+    case (5):
       addParagraph(info,
                    "The current that goes through a speaker powers a solenoid (called a \"voice coil\"), which generates magnetic field according to");
       addParagraph(info, "B&#8347 = &#956&#8320nI");
@@ -898,7 +906,7 @@ void InitializePage(int i)
       }
       enableNextButton();
       break;
-    case (5):
+    case (6):
     {
       emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
       emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
@@ -938,7 +946,7 @@ void InitializePage(int i)
       enableNextButton();
       break;
     }
-    case (6): {
+    case (7): {
       std::string perfectlyEfficient = std::to_string(audio::watts_to_decibels(1, 1));
       std::string extraordinarilyEfficient = std::to_string(audio::decibels_to_watts(105, 1) * 100) + "%";
       std::string veryEfficient = std::to_string(audio::decibels_to_watts(95, 1) * 100) + "%";
@@ -975,7 +983,7 @@ void InitializePage(int i)
       enableNextButton();
       break;
     }
-    case(7):
+    case(8):
       enablePlayButton();
       enableNextButton();
       break;
@@ -1021,7 +1029,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 3:
+    case 4:
     {
       std::vector<double> frequencies{-1};
       if (false) {
@@ -1029,7 +1037,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 6:
+    case 5:
     {
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
       emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
@@ -1041,7 +1049,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 7:
+    case 6:
       circuitCompleted = true;
       break;
     default:
