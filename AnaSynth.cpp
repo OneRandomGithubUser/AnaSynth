@@ -823,7 +823,7 @@ void InitializePage(int i)
       addParagraph(info, "The resistance of the speaker is already given to us.");
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
-      addLabel(info, "lValue", "F");
+      addLabel(info, "lValue", "H");
       addBreak(info);
       addBreak(info);
       addLabel(info, "rValue", "R = ", "left-label");
@@ -853,6 +853,25 @@ void InitializePage(int i)
       enableNextButton();
       break;
     case (3):
+    {
+      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
+      emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
+      emscripten::val fValue = addInputField("fValue", true, 0.1, 0);
+
+      addLabel(info, "lValue", "L = ", "left-label");
+      info.call<emscripten::val>("appendChild", lValue);
+      addLabel(info, "lValue", "H");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "cValue", "C = ", "left-label");
+      info.call<emscripten::val>("appendChild", cValue);
+      addLabel(info, "cValue", "F");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "fValue", "f = ", "left-label");
+      info.call<emscripten::val>("appendChild", fValue);
+      addLabel(info, "fValue", "Hz");
+      addParagraph(info, "GOAL: f = 440 Hz");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
@@ -860,6 +879,7 @@ void InitializePage(int i)
       }
       enableNextButton();
       break;
+    }
     case (4):
       addParagraph(info,
                    "The current that goes through a speaker powers a solenoid (called a \"voice coil\"), which generates magnetic field according to");
