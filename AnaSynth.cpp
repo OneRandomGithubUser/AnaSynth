@@ -884,11 +884,13 @@ void InitializePage(int i)
       std::string veryEfficient = std::to_string(audio::decibels_to_watts(95, 1) * 100) + "%";
       std::string average = std::to_string(audio::decibels_to_watts(88, 1) * 100) + "%";
       std::string veryInefficient = std::to_string(audio::decibels_to_watts(83, 1) * 100) + "%";
-      emscripten::val rValue = addInputField("rValue", false, 0.1, 0);
+      emscripten::val rValue = addInputField("rValue", false, 2, 2, 16, 6);
       emscripten::val efficiencyValue = addInputField("efficiencyValue", true, 0.1, 0, 109.453876, 88);
       emscripten::val sensitivityValue = addInputField("sensitivityValue", false, 0.1, 0, 109.453876, 88);
       addParagraph(info, "Now, we give you the freedom to manipulate the statistics of the speaker.");
-      addParagraph(info, "Speaker sensitivity, which is a measure of the efficiency of a speaker, is often measured as the volume of the sound from a distance of 1 meter when 1 watt is passed through it.");
+      addParagraph(info, "The resistance of the speaker, which would be called the speaker impedance in an AC circuit, controls the time constant and the initial sound volume. Since it changes two key values rather than just one, we have restricted changing its value until now.");
+      addParagraph(info, "Speaker sensitivity, which is a measure of the efficiency of a speaker to convert electrical to sound energy, is often measured as the volume of the sound from a distance of 1 meter when 1 watt is passed through it.");
+      addParagraph(info, "It will also affect the initial sound volume, though it does not change the actual resistance of the speaker and so does not affect the time constant");
       addParagraph(info, "A perfectly efficient speaker has a sensitivity of " + perfectlyEfficient + "dB. Real world speakers have quite a range of efficiencies:");
       addParagraph(info, "Extraordinarily efficient speaker: 105 dB (" + extraordinarilyEfficient + " efficiency)");
       addParagraph(info, "Very efficient speaker: 95 dB (" + veryEfficient + " efficiency)");
