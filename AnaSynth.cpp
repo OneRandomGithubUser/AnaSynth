@@ -898,7 +898,47 @@ void InitializePage(int i)
       }
       enableNextButton();
       break;
-    case (5): {
+    case (5):
+    {
+      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
+      emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
+      emscripten::val vValue = addInputField("vValue", true, 0.1, 0);
+      emscripten::val pValue = addInputField("pValue", true, 0.1, 0);
+      emscripten::val lpValue = addInputField("lpValue", true, 0.1, 0);
+
+      addLabel(info, "lValue", "L = ", "left-label");
+      info.call<emscripten::val>("appendChild", lValue);
+      addLabel(info, "lValue", "H");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "cValue", "C = ", "left-label");
+      info.call<emscripten::val>("appendChild", cValue);
+      addLabel(info, "cValue", "F");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "vValue", "v = ", "left-label");
+      info.call<emscripten::val>("appendChild", vValue);
+      addLabel(info, "vValue", "V");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "pValue", "P = ", "left-label");
+      info.call<emscripten::val>("appendChild", pValue);
+      addLabel(info, "pValue", "W");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "lpValue", "L<sub style=\"font-size:75%;\">p</sub> = ", "left-label");
+      info.call<emscripten::val>("appendChild", lpValue);
+      addLabel(info, "lpValue", "dB");
+      addParagraph(info, "GOAL: ?");
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
+      break;
+    }
+    case (6): {
       std::string perfectlyEfficient = std::to_string(audio::watts_to_decibels(1, 1));
       std::string extraordinarilyEfficient = std::to_string(audio::decibels_to_watts(105, 1) * 100) + "%";
       std::string veryEfficient = std::to_string(audio::decibels_to_watts(95, 1) * 100) + "%";
@@ -923,7 +963,7 @@ void InitializePage(int i)
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "sensitivityValue", "dB<sub style=\"font-size:60%;\">1m</sub> = ", "left-label");
+      addLabel(info, "sensitivityValue", "dB<sub style=\"font-size:75%;\">1m</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", sensitivityValue);
       addLabel(info, "sensitivityValue", "dB");
       addBreak(info);
@@ -935,7 +975,7 @@ void InitializePage(int i)
       enableNextButton();
       break;
     }
-    case(6):
+    case(7):
       enablePlayButton();
       enableNextButton();
       break;
@@ -989,7 +1029,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 5:
+    case 6:
     {
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
       emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
@@ -1001,7 +1041,7 @@ void RenderSidebar()
       }
       break;
     }
-    case 6:
+    case 7:
       circuitCompleted = true;
       break;
     default:
