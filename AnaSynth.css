@@ -48,9 +48,24 @@ label {
     box-shadow: 2px 2px 5px black;
 }
 
+#intro-text {
+    left: 30%;
+    right: 30%;
+    top: 30%;
+    bottom: 30%;
+    padding: 16px;
+    display: block;
+    text-align: left;
+    justify-content: left;
+    background: white;
+    box-shadow: 2px 2px 5px black;
+}
+
 #intro-button {
     display: initial;
-    position: initial;
+    position: relative;
+    bottom: 0;
+    margin: 16px;
 }
 
 #sidebar {
