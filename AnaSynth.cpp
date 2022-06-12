@@ -895,6 +895,65 @@ void addCapacitorLabelSet(emscripten::val info, emscripten::val cValue, std::str
   addLabel(info, c, "F");
 }
 
+void addSelectOctave(emscripten::val info, std::string id) {
+  emscripten::val sel = document.call<emscripten::val>("createElement", emscripten::val("select"));
+  sel.set("id", id);
+  sel.set("name", id);
+  info.call<void>("appendChild", sel);
+  emscripten::val c = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  c.set("value", "c");
+  c.set("innerHTML", "C4");
+  sel.call<void>("appendChild", c);
+  emscripten::val cs = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  cs.set("value", "cs");
+  cs.set("innerHTML", "C#");
+  sel.call<void>("appendChild", cs);
+  emscripten::val d = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  d.set("value", "d");
+  d.set("innerHTML", "D");
+  sel.call<void>("appendChild", d);
+  emscripten::val ds = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  ds.set("value", "ds");
+  ds.set("innerHTML", "D#");
+  sel.call<void>("appendChild", ds);
+  emscripten::val e = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  e.set("value", "e");
+  e.set("innerHTML", "E");
+  sel.call<void>("appendChild", e);
+  emscripten::val f = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  f.set("value", "f");
+  f.set("innerHTML", "F");
+  sel.call<void>("appendChild", f);
+  emscripten::val fs = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  fs.set("value", "fs");
+  fs.set("innerHTML", "F#");
+  sel.call<void>("appendChild", fs);
+  emscripten::val g = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  g.set("value", "g");
+  g.set("innerHTML", "G");
+  sel.call<void>("appendChild", g);
+  emscripten::val gs = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  gs.set("value", "gs");
+  gs.set("innerHTML", "G#");
+  sel.call<void>("appendChild", gs);
+  emscripten::val a = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  a.set("value", "a");
+  a.set("innerHTML", "A");
+  sel.call<void>("appendChild", a);
+  emscripten::val as = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  as.set("value", "as");
+  as.set("innerHTML", "A#");
+  sel.call<void>("appendChild", as);
+  emscripten::val b = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  b.set("value", "b");
+  b.set("innerHTML", "B");
+  sel.call<void>("appendChild", b);
+  emscripten::val c2 = document.call<emscripten::val>("createElement", emscripten::val("option"));
+  c2.set("value", "c2");
+  c2.set("innerHTML", "C5");
+  sel.call<void>("appendChild", c2);
+}
+
 void InitializePage(int i)
 {
   emscripten::val info = document.call<emscripten::val>("getElementById", emscripten::val("info"));
@@ -1101,6 +1160,7 @@ void InitializePage(int i)
       emscripten::val c12Value = addInputField("c12Value", false, 0.1, 0);
       emscripten::val c13Value = addInputField("c13Value", false, 0.1, 0);
 
+      addParagraph(info, "Time to create a scale! Match each frequency as closely as you can.");
       addLabel(info, "c1Value", "C<sub style=\"font-size:75%;\">4</sub>: 261.63 Hz");
       addCapacitorLabelSet(info, c1Value, "c1Value", "1");
       addBreak(info);
@@ -1155,6 +1215,14 @@ void InitializePage(int i)
       enableNextButton();
       break;
     }
+    case (9):
+      addLabel(info, "s1", "Note 1:", "left-label");
+      addSelectOctave(info, "s1");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "s2", "Note 2:", "left-label");
+      addSelectOctave(info, "s2");
+      break;
     default:
       printf("page out of range\n");
       break;
