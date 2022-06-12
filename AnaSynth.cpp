@@ -889,10 +889,10 @@ void addLabel(emscripten::val sidebar, std::string f, std::string s, std::string
   sidebar.call<void>("appendChild", l);
 }
 
-void addInductorLabelSet(emscripten::val info, emscripten::val lValue, std::string l, std::string number) {
-  addLabel(info, l, "L<sub style=\"font-size:75%;\">" + number +"</sub> = ", "left-label");
-  info.call<emscripten::val>("appendChild", lValue);
-  addLabel(info, l, "H");
+void addCapacitorLabelSet(emscripten::val info, emscripten::val cValue, std::string c, std::string number) {
+  addLabel(info, c, "C<sub style=\"font-size:75%;\">" + number +"</sub> = ", "left-label");
+  info.call<emscripten::val>("appendChild", cValue);
+  addLabel(info, c, "F");
 }
 
 void InitializePage(int i)
@@ -1087,70 +1087,70 @@ void InitializePage(int i)
     }
     case(8):
     {
-      emscripten::val l1Value = addInputField("l1Value", false, 0.1, 0);
-      emscripten::val l2Value = addInputField("l2Value", false, 0.1, 0);
-      emscripten::val l3Value = addInputField("l3Value", false, 0.1, 0);
-      emscripten::val l4Value = addInputField("l4Value", false, 0.1, 0);
-      emscripten::val l5Value = addInputField("l5Value", false, 0.1, 0);
-      emscripten::val l6Value = addInputField("l6Value", false, 0.1, 0);
-      emscripten::val l7Value = addInputField("l7Value", false, 0.1, 0);
-      emscripten::val l8Value = addInputField("l8Value", false, 0.1, 0);
-      emscripten::val l9Value = addInputField("l9Value", false, 0.1, 0);
-      emscripten::val l10Value = addInputField("l10Value", false, 0.1, 0);
-      emscripten::val l11Value = addInputField("l11Value", false, 0.1, 0);
-      emscripten::val l12Value = addInputField("l12Value", false, 0.1, 0);
-      emscripten::val l13Value = addInputField("l13Value", false, 0.1, 0);
+      emscripten::val c1Value = addInputField("c1Value", false, 0.1, 0);
+      emscripten::val c2Value = addInputField("c2Value", false, 0.1, 0);
+      emscripten::val c3Value = addInputField("c3Value", false, 0.1, 0);
+      emscripten::val c4Value = addInputField("c4Value", false, 0.1, 0);
+      emscripten::val c5Value = addInputField("c5Value", false, 0.1, 0);
+      emscripten::val c6Value = addInputField("c6Value", false, 0.1, 0);
+      emscripten::val c7Value = addInputField("c7Value", false, 0.1, 0);
+      emscripten::val c8Value = addInputField("c8Value", false, 0.1, 0);
+      emscripten::val c9Value = addInputField("c9Value", false, 0.1, 0);
+      emscripten::val c10Value = addInputField("c10Value", false, 0.1, 0);
+      emscripten::val c11Value = addInputField("c11Value", false, 0.1, 0);
+      emscripten::val c12Value = addInputField("c12Value", false, 0.1, 0);
+      emscripten::val c13Value = addInputField("c13Value", false, 0.1, 0);
 
-      addLabel(info, "l1Value", "C<sub style=\"font-size:75%;\">4</sub>: 261.63 Hz");
-      addInductorLabelSet(info, l1Value, "l1Value", "1");
+      addLabel(info, "c1Value", "C<sub style=\"font-size:75%;\">4</sub>: 261.63 Hz");
+      addCapacitorLabelSet(info, c1Value, "c1Value", "1");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l2Value", "C#<sub style=\"font-size:75%;\">4</sub>: 277.18 Hz");
-      addInductorLabelSet(info, l2Value, "l2Value", "2");
+      addLabel(info, "c2Value", "C#<sub style=\"font-size:75%;\">4</sub>: 277.18 Hz");
+      addCapacitorLabelSet(info, c2Value, "c2Value", "2");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l3Value", "D<sub style=\"font-size:75%;\">4</sub>: 293.66 Hz");
-      addInductorLabelSet(info, l3Value, "l3Value", "3");
+      addLabel(info, "c3Value", "D<sub style=\"font-size:75%;\">4</sub>: 293.66 Hz");
+      addCapacitorLabelSet(info, c3Value, "c3Value", "3");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l4Value", "D#<sub style=\"font-size:75%;\">4</sub>: 311.13 Hz");
-      addInductorLabelSet(info, l4Value, "l4Value", "4");
+      addLabel(info, "c4Value", "D#<sub style=\"font-size:75%;\">4</sub>: 311.13 Hz");
+      addCapacitorLabelSet(info, c4Value, "c4Value", "4");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l5Value", "E<sub style=\"font-size:75%;\">4</sub>: 329.63 Hz");
-      addInductorLabelSet(info, l5Value, "l5Value", "5");
+      addLabel(info, "c5Value", "E<sub style=\"font-size:75%;\">4</sub>: 329.63 Hz");
+      addCapacitorLabelSet(info, c5Value, "c5Value", "5");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l6Value", "F<sub style=\"font-size:75%;\">4</sub>: 349.23 Hz");
-      addInductorLabelSet(info, l6Value, "l6Value", "6");
+      addLabel(info, "c6Value", "F<sub style=\"font-size:75%;\">4</sub>: 349.23 Hz");
+      addCapacitorLabelSet(info, c6Value, "c6Value", "6");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l7Value", "F#<sub style=\"font-size:75%;\">4</sub>: 369.99 Hz");
-      addInductorLabelSet(info, l7Value, "l7Value", "7");
+      addLabel(info, "c7Value", "F#<sub style=\"font-size:75%;\">4</sub>: 369.99 Hz");
+      addCapacitorLabelSet(info, c7Value, "c7Value", "7");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l8Value", "G<sub style=\"font-size:75%;\">4</sub>: 392.00 Hz");
-      addInductorLabelSet(info, l8Value, "l8Value", "8");
+      addLabel(info, "c8Value", "G<sub style=\"font-size:75%;\">4</sub>: 392.00 Hz");
+      addCapacitorLabelSet(info, c8Value, "c8Value", "8");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l9Value", "G#<sub style=\"font-size:75%;\">4</sub>: 415.30 Hz");
-      addInductorLabelSet(info, l9Value, "l9Value", "9");
+      addLabel(info, "c9Value", "G#<sub style=\"font-size:75%;\">4</sub>: 415.30 Hz");
+      addCapacitorLabelSet(info, c9Value, "c9Value", "9");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l10Value", "A<sub style=\"font-size:75%;\">4</sub>: 440.00 Hz");
-      addInductorLabelSet(info, l10Value, "l10Value", "10");
+      addLabel(info, "c10Value", "A<sub style=\"font-size:75%;\">4</sub>: 440.00 Hz");
+      addCapacitorLabelSet(info, c10Value, "c10Value", "10");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l11Value", "A#<sub style=\"font-size:75%;\">4</sub>: 466.16 Hz");
-      addInductorLabelSet(info, l11Value, "l11Value", "11");
+      addLabel(info, "c11Value", "A#<sub style=\"font-size:75%;\">4</sub>: 466.16 Hz");
+      addCapacitorLabelSet(info, c11Value, "c11Value", "11");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l12Value", "B<sub style=\"font-size:75%;\">4</sub>: 493.88 Hz");
-      addInductorLabelSet(info, l12Value, "l12Value", "12");
+      addLabel(info, "c12Value", "B<sub style=\"font-size:75%;\">4</sub>: 493.88 Hz");
+      addCapacitorLabelSet(info, c12Value, "c12Value", "12");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "l13Value", "C<sub style=\"font-size:75%;\">5</sub>: 523.25 Hz");
-      addInductorLabelSet(info, l13Value, "l13Value", "13");
+      addLabel(info, "c13Value", "C<sub style=\"font-size:75%;\">5</sub>: 523.25 Hz");
+      addCapacitorLabelSet(info, c13Value, "c13Value", "13");
       enablePlayButton();
       enableNextButton();
       break;
