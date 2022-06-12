@@ -1714,12 +1714,11 @@ var ASM_CONSTS = {
     }
 
   
-    /**
-     * @param {number} ptr
-     * @param {string} type
-     */
-  function getValue(ptr, type = 'i8') {
-      if (type.endsWith('*')) type = 'i32';
+    /** @param {number} ptr
+        @param {string} type
+        @param {number|boolean=} noSafe */
+  function getValue(ptr, type = 'i8', noSafe) {
+      if (type.endsWith('*')) type = 'u32';
       switch (type) {
         case 'i1': return HEAP8[((ptr)>>0)];
         case 'i8': return HEAP8[((ptr)>>0)];
@@ -1774,13 +1773,12 @@ var ASM_CONSTS = {
     }
 
   
-    /**
-     * @param {number} ptr
-     * @param {number} value
-     * @param {string} type
-     */
-  function setValue(ptr, value, type = 'i8') {
-      if (type.endsWith('*')) type = 'i32';
+    /** @param {number} ptr
+        @param {number} value
+        @param {string} type
+        @param {number|boolean=} noSafe */
+  function setValue(ptr, value, type = 'i8', noSafe) {
+      if (type.endsWith('*')) type = 'u32';
       switch (type) {
         case 'i1': HEAP8[((ptr)>>0)] = value; break;
         case 'i8': HEAP8[((ptr)>>0)] = value; break;
@@ -5757,8 +5755,9 @@ var ASM_CONSTS = {
         FS.createStandardStreams();
       },quit:() => {
         FS.init.initialized = false;
-        // force-flush all streams, so we get musl std streams printed out
-        _fflush(0);
+        // Call musl-internal function to close all stdio streams, so nothing is
+        // left in internal buffers.
+        ___stdio_exit();
         // close all of our streams
         for (var i = 0; i < FS.streams.length; i++) {
           var stream = FS.streams[i];
@@ -7037,7 +7036,7 @@ var ___embind_register_native_and_builtin_types = Module["___embind_register_nat
 var ___errno_location = Module["___errno_location"] = createExportWrapper("__errno_location");
 
 /** @type {function(...*):?} */
-var _fflush = Module["_fflush"] = createExportWrapper("fflush");
+var ___stdio_exit = Module["___stdio_exit"] = createExportWrapper("__stdio_exit");
 
 /** @type {function(...*):?} */
 var _free = Module["_free"] = createExportWrapper("free");
@@ -7703,7 +7702,7 @@ unexportedRuntimeFunction('exceptionCaught', false);
 unexportedRuntimeFunction('ExceptionInfo', false);
 unexportedRuntimeFunction('exception_addRef', false);
 unexportedRuntimeFunction('exception_decRef', false);
-unexportedRuntimeFunction('getExceptionMessage', false);
+unexportedRuntimeFunction('formatException', false);
 unexportedRuntimeFunction('Browser', false);
 unexportedRuntimeFunction('setMainLoop', false);
 unexportedRuntimeFunction('wget', false);
@@ -7971,7 +7970,7 @@ function checkUnflushedContent() {
     has = true;
   }
   try { // it doesn't matter if it fails
-    _fflush(0);
+    ___stdio_exit();
     // also flush in the JS FS layer
     ['stdout', 'stderr'].forEach(function(name) {
       var info = FS.analyzePath('/dev/' + name);

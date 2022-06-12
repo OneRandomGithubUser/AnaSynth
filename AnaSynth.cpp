@@ -460,6 +460,95 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("fill");
 }
 
+void DrawTwoCircuits(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
+  double width = ctx["canvas"]["width"].as<double>();
+  double height = ctx["canvas"]["height"].as<double>();
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.7+39, height*0.5);
+  ctx.call<void>("lineTo", width*0.9, height*0.5);
+  ctx.call<void>("lineTo", width*0.9, height*0.2);
+  ctx.call<void>("lineTo", width*0.3+10, height*0.2);
+  ctx.call<void>("stroke");
+  DrawSpeaker(ctx, width*0.3, height*0.2, highlightSpeaker);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3-12, height*0.2);
+  ctx.call<void>("lineTo", width*0.1, height*0.2);
+  ctx.call<void>("lineTo", width*0.1, height*0.5);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.5);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.4);
+  ctx.call<void>("stroke");
+  DrawBattery(ctx, width*0.3, height*0.4, highlightBattery);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.4);
+  ctx.call<void>("lineTo", width*0.3+25, height*0.5-20);
+  ctx.call<void>("stroke");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.5);
+  if (audio::get_playing()) {
+    ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.5);
+  } else {
+    ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.5 - 20);
+  }
+  ctx.call<void>("stroke");
+  DrawCapacitor(ctx, width*0.3, height*0.5, highlightCapacitor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25+20, height*0.5);
+  ctx.call<void>("lineTo", width*0.7-40, height*0.5);
+  ctx.call<void>("stroke");
+  DrawInductor(ctx, width*0.7, height*0.5, highlightInductor);
+  ctx.set("fillStyle", emscripten::val("black"));
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.5, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.5-20, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+45, height*0.5, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.1, height*0.5);
+  ctx.call<void>("lineTo", width*0.1, height*0.8);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.8);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.7);
+  ctx.call<void>("stroke");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.7+39, height*0.8);
+  ctx.call<void>("lineTo", width*0.9, height*0.8);
+  ctx.call<void>("lineTo", width*0.9, height*0.5);
+  ctx.call<void>("stroke");
+  DrawBattery(ctx, width*0.3, height*0.7, highlightBattery);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.7);
+  ctx.call<void>("lineTo", width*0.3+25, height*0.8-20);
+  ctx.call<void>("stroke");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.8);
+  if (audio::get_playing()) {
+    ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.8);
+  } else {
+    ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.8 - 20);
+  }
+  ctx.call<void>("stroke");
+  DrawCapacitor(ctx, width*0.3, height*0.8, highlightCapacitor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25+20, height*0.8);
+  ctx.call<void>("lineTo", width*0.7-40, height*0.8);
+  ctx.call<void>("stroke");
+  DrawInductor(ctx, width*0.7, height*0.8, highlightInductor);
+  ctx.set("fillStyle", emscripten::val("black"));
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.8, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.8-20, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+45, height*0.8, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+}
+
 void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, std::string label, bool highlight)
 {
   // NOTE: this must be placed on a TOP edge, also this assumes 60 fps TODO
@@ -686,6 +775,13 @@ void RenderCanvas()
       DrawFullCircuit(ctx, false, false, true, false);
       break;
     }
+    case 8: {
+      DrawFullCircuit(ctx, false, true, false, false);
+      break;
+    }
+    case 9:
+      DrawTwoCircuits(ctx, false, false, false, false);
+      break;
     default:
       ctx.call<void>("beginPath");
       ctx.call<void>("arc", 200 + 100*sin(FRAME_COUNT/(12*pi)), 150 + 75*sin(FRAME_COUNT/(7.5*pi)), abs(50*sin(FRAME_COUNT/(18*pi))), 0, 2 * pi);
@@ -791,6 +887,12 @@ void addLabel(emscripten::val sidebar, std::string f, std::string s, std::string
   l.set("className", c);
   l.set("innerHTML", s);
   sidebar.call<void>("appendChild", l);
+}
+
+void addInductorLabelSet(emscripten::val info, emscripten::val lValue, std::string l, std::string number) {
+  addLabel(info, l, "L<sub style=\"font-size:75%;\">" + number +"</sub> = ", "left-label");
+  info.call<emscripten::val>("appendChild", lValue);
+  addLabel(info, l, "H");
 }
 
 void InitializePage(int i)
@@ -984,9 +1086,43 @@ void InitializePage(int i)
       break;
     }
     case(8):
+    {
+      emscripten::val l1Value = addInputField("l1Value", false, 0.1, 0);
+      emscripten::val l2Value = addInputField("l2Value", false, 0.1, 0);
+      emscripten::val l3Value = addInputField("l3Value", false, 0.1, 0);
+      emscripten::val l4Value = addInputField("l4Value", false, 0.1, 0);
+      emscripten::val l5Value = addInputField("l5Value", false, 0.1, 0);
+      emscripten::val l6Value = addInputField("l6Value", false, 0.1, 0);
+      emscripten::val l7Value = addInputField("l7Value", false, 0.1, 0);
+      emscripten::val l8Value = addInputField("l8Value", false, 0.1, 0);
+      emscripten::val l9Value = addInputField("l9Value", false, 0.1, 0);
+      emscripten::val l10Value = addInputField("l10Value", false, 0.1, 0);
+      emscripten::val l11Value = addInputField("l11Value", false, 0.1, 0);
+      emscripten::val l12Value = addInputField("l12Value", false, 0.1, 0);
+      emscripten::val l13Value = addInputField("l13Value", false, 0.1, 0);
+
+      addParagraph(info, "C<sub style=\"font-size:75%;\">4</sub>: 261.63 Hz");
+      addInductorLabelSet(info, l1Value, "l1Value", "1");
+      addBreak(info);
+      addParagraph(info, "C#<sub style=\"font-size:75%;\">4</sub>: 277.18 Hz");
+      addInductorLabelSet(info, l2Value, "l2Value", "2");
+      addBreak(info);
+      addParagraph(info, "D<sub style=\"font-size:75%;\">4</sub>: 293.66 Hz");
+      addInductorLabelSet(info, l3Value, "l3Value", "3");
+      addBreak(info);
+      addParagraph(info, "D#<sub style=\"font-size:75%;\">4</sub>: 311.13 Hz");
+      addInductorLabelSet(info, l4Value, "l4Value", "4");
+      addBreak(info);
+      addParagraph(info, "E<sub style=\"font-size:75%;\">4</sub>: 329.63 Hz");
+      addInductorLabelSet(info, l5Value, "l5Value", "5");
+      addBreak(info);
+      addParagraph(info, "F<sub style=\"font-size:75%;\">4</sub>: 349.23 Hz");
+      addInductorLabelSet(info, l6Value, "l6Value", "6");
+      addBreak(info);
       enablePlayButton();
       enableNextButton();
       break;
+    }
     default:
       printf("page out of range\n");
       break;
