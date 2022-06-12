@@ -1145,7 +1145,7 @@ void InitializePage(int i)
     case (5):
       addParagraph(info,
                    "The current that goes through a speaker powers a solenoid (called a \"voice coil\"), which generates magnetic field according to");
-      addBigParagraph(info, "B&#8347 = &#956&#8320nI");
+      addBigParagraph(info, "B<sub>s</sub> = &#956<sub>0</sub>nI");
       addParagraph(info, "and attracts or repels the magnet that the solenoid is wrapped around.");
       addParagraph(info,
                    "As the solenoid, which is free floating, pulsates away and towards the magnet, it pulls along the speaker cone attached to it, creating alternating waves of low and high air pressure, which we hear as sound");
