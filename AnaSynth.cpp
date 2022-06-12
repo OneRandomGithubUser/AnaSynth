@@ -162,6 +162,30 @@ namespace audio
     // always playes a 440 Hz sound at a volume of 1 and slows it down by a factor of 1,000 (performace.now() is in milliseconds)
     return sin(2*pi*440*(emscripten::val::global("performance").call<emscripten::val>("now").as<double>()/1000)/1000);
   }
+  double get_example_rc_current()
+  {
+    // always plays a 440 Hz sound at a volume of 1 and slows it down by a time constant of 5.0 seconds
+    double currentTime = emscripten::val::global("performance").call<emscripten::val>("now").as<double>()/1000;
+    double cycle = fmod(currentTime, 5.0);
+    if (cycle > 4.0)
+    {
+       return 0;
+    } else {
+      return sin(2*pi*440*(currentTime)) * pow(e, -cycle);
+    }
+  }
+  double get_slowed_example_rc_current()
+  {
+    // always plays a 440 Hz sound at a volume of 1 and slows it down by a time constant of 5.0 seconds
+    double currentTime = emscripten::val::global("performance").call<emscripten::val>("now").as<double>()/1000;
+    double cycle = fmod(currentTime, 5.0);
+    if (cycle > 4.0)
+    {
+      return 0;
+    } else {
+      return sin(2*pi*440*(currentTime/100)) * pow(e, -cycle);
+    }
+  }
   double get_time_constant()
   {
     return TIME_CONSTANT;
@@ -289,7 +313,12 @@ void ResizeCanvas(emscripten::val event)
 }
 
 // width: 60
-void DrawResistor(emscripten::val ctx, int x, int y) {
+void DrawResistor(emscripten::val ctx, int x, int y, bool highlight) {
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
   ctx.call<void>("beginPath");
   ctx.call<void>("moveTo", x-30, y);
   ctx.call<void>("lineTo", x-25, y-8);
@@ -300,6 +329,11 @@ void DrawResistor(emscripten::val ctx, int x, int y) {
   ctx.call<void>("lineTo", x+25, y+8);
   ctx.call<void>("lineTo", x+30, y);
   ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
 }
 
 // width: 50
@@ -397,6 +431,97 @@ void DrawBattery(emscripten::val ctx, int x, int y, bool highlight) {
     ctx.set("lineWidth", emscripten::val(1));
   }
 }
+void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, std::string label, bool highlight)
+{
+  // NOTE: this must be placed on a TOP edge, also this assumes 60 fps TODO
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
+    ctx.set("lineWidth", emscripten::val(3));
+  }
+  double labelDescent = ctx.call<emscripten::val>("measureText", emscripten::val(label))["actualBoundingBoxDescent"].as<double>();
+  double labelAscent = ctx.call<emscripten::val>("measureText", emscripten::val(label))["actualBoundingBoxAscent"].as<double>();
+  ctx.call<void>("fillText", emscripten::val(label), x, y - spacing - labelDescent);
+  ctx.call<void>("fillText", emscripten::val("CURRENT"), x, y - spacing - labelDescent - labelAscent - spacing -
+                                                            ctx.call<emscripten::val>("measureText",
+                                                                                      emscripten::val(
+                                                                                              "CURRENT"))["actualBoundingBoxDescent"].as<double>());
+
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", x, y + spacing);
+  double arrowLength = audio::get_initial_volume() * pixelsAtVolume1 * current;
+  ctx.call<void>("lineTo", x + arrowLength, y + spacing);
+  if (arrowLength > 0)
+  {
+    ctx.call<void>("moveTo", x + arrowLength - spacing/2.0, y + spacing/2.0);
+    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
+    ctx.call<void>("lineTo", x + arrowLength - spacing/2.0, y + 3*spacing/2.0);
+  } else if (arrowLength < 0) {
+    ctx.call<void>("moveTo", x + arrowLength + spacing/2.0, y + spacing/2.0);
+    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
+    ctx.call<void>("lineTo", x + arrowLength + spacing/2.0, y + 3*spacing/2.0);
+  } else {
+    ctx.call<void>("fillText", emscripten::val("0"), x, y + spacing + ctx.call<emscripten::val>("measureText",
+                                                                                                emscripten::val(
+                                                                                                        "0"))["actualBoundingBoxAscent"].as<double>());
+  }
+  ctx.call<void>("stroke");
+  if (highlight)
+  {
+    ctx.set("strokeStyle", emscripten::val("Black"));
+    ctx.set("lineWidth", emscripten::val(1));
+  }
+}
+void DrawExampleCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightResistor, bool highlightBattery) {
+  double width = ctx["canvas"]["width"].as<double>();
+  double height = ctx["canvas"]["height"].as<double>();
+  ctx.set("fillStyle", emscripten::val("black"));
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.5, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.5-20, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+45, height*0.5, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  DrawCapacitor(ctx, width*0.3, height*0.5, highlightCapacitor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25+20, height*0.5);
+  ctx.call<void>("lineTo", width*0.7-40, height*0.5);
+  ctx.call<void>("stroke");
+  DrawInductor(ctx, width*0.7, height*0.5, highlightInductor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.7+39, height*0.5);
+  ctx.call<void>("lineTo", width*0.9, height*0.5);
+  ctx.call<void>("lineTo", width*0.9, height*0.2);
+  ctx.call<void>("lineTo", width*0.3+30, height*0.2);
+  ctx.call<void>("stroke");
+  DrawResistor(ctx, width*0.3, height*0.2, highlightResistor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3-30, height*0.2);
+  ctx.call<void>("lineTo", width*0.1, height*0.2);
+  ctx.call<void>("lineTo", width*0.1, height*0.5);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.5);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.4);
+  ctx.call<void>("stroke");
+  DrawBattery(ctx, width*0.3, height*0.4, highlightBattery);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.4);
+  ctx.call<void>("lineTo", width*0.3+25, height*0.5-20);
+  ctx.call<void>("stroke");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.5);
+  double current = audio::get_example_rc_current();
+  if (current != 0) {
+    ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.5);
+  } else {
+    ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.5 - 20);
+  }
+  ctx.call<void>("stroke");
+  DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1, audio::get_slowed_example_rc_current(), "(SLOWED 100x)", false);
+  DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, current, "(REAL TIME)", false);
+}
 
 void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
   double width = ctx["canvas"]["width"].as<double>();
@@ -432,20 +557,6 @@ void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highligh
     ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.5);
   } else {
     ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.5 - 20);
-/*
-  switch(position) {
-    case(0):
-      ctx.call<void>("lineTo", width*0.3+25+14, height*0.5-14);
-      break;
-    case(1):
-      ctx.call<void>("lineTo", width*0.3+25, height*0.5-20);
-      break;
-    case(2):
-      ctx.call<void>("lineTo", width*0.3+45, height*0.5);
-      break;
-    default:
-      break;
-*/
   }
   ctx.call<void>("stroke");
   ctx.set("fillStyle", emscripten::val("black"));
@@ -549,47 +660,7 @@ void DrawTwoCircuits(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("fill");
 }
 
-void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, std::string label, bool highlight)
-{
-  // NOTE: this must be placed on a TOP edge, also this assumes 60 fps TODO
-  if (highlight)
-  {
-    ctx.set("strokeStyle", emscripten::val("#00BFFF"));
-    ctx.set("lineWidth", emscripten::val(3));
-  }
-  double labelDescent = ctx.call<emscripten::val>("measureText", emscripten::val(label))["actualBoundingBoxDescent"].as<double>();
-  double labelAscent = ctx.call<emscripten::val>("measureText", emscripten::val(label))["actualBoundingBoxAscent"].as<double>();
-  ctx.call<void>("fillText", emscripten::val(label), x, y - spacing - labelDescent);
-  ctx.call<void>("fillText", emscripten::val("CURRENT"), x, y - spacing - labelDescent - labelAscent - spacing -
-                                                        ctx.call<emscripten::val>("measureText",
-                                                                                  emscripten::val(
-                                                                                          "CURRENT"))["actualBoundingBoxDescent"].as<double>());
 
-  ctx.call<void>("beginPath");
-  ctx.call<void>("moveTo", x, y + spacing);
-  double arrowLength = audio::get_initial_volume() * pixelsAtVolume1 * current;
-  ctx.call<void>("lineTo", x + arrowLength, y + spacing);
-  if (arrowLength > 0)
-  {
-    ctx.call<void>("moveTo", x + arrowLength - spacing/2.0, y + spacing/2.0);
-    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
-    ctx.call<void>("lineTo", x + arrowLength - spacing/2.0, y + 3*spacing/2.0);
-  } else if (arrowLength < 0) {
-    ctx.call<void>("moveTo", x + arrowLength + spacing/2.0, y + spacing/2.0);
-    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
-    ctx.call<void>("lineTo", x + arrowLength + spacing/2.0, y + 3*spacing/2.0);
-  } else {
-    ctx.call<void>("fillText", emscripten::val("0"), x, y + spacing + ctx.call<emscripten::val>("measureText",
-                                                                                             emscripten::val(
-                                                                                                     "0"))["actualBoundingBoxAscent"].as<double>());
-  }
-  ctx.call<void>("stroke");
-  if (highlight)
-  {
-    ctx.set("strokeStyle", emscripten::val("Black"));
-    ctx.set("lineWidth", emscripten::val(1));
-  }
-}
 int split(int input, int totalDistance)
 {
   if (input < totalDistance / 3)
@@ -659,6 +730,9 @@ void RenderCanvas()
   ctx.set("fillStyle", gradient);
   ctx.call<void>("fillRect", 0, 0, canvas["width"], canvas["height"]);
   ctx.set("fillStyle", emscripten::val("black"));
+
+  double width = canvas["width"].as<double>();
+  double height = canvas["height"].as<double>();
   switch(page)
   {
     case 0:
@@ -676,8 +750,12 @@ void RenderCanvas()
       ctx.call<void>("lineTo", 130, 400);
       ctx.call<void>("lineTo", 170, 400);
       ctx.call<void>("stroke");
+      DrawCurrent(ctx, 280, 200, 10, 150, audio::get_example_current(), "(SLOWED 1000x)", false);
       break;
     case 1:
+      DrawExampleCircuit(ctx, false, false, true, false);
+      break;
+    case 2:
       DrawFullCircuit(ctx, false, true, true, false);
       break;
     // case 2:
@@ -687,8 +765,6 @@ void RenderCanvas()
       DrawFullCircuit(ctx, true, true, false, false);
       break;
     case 5: {
-      double width = canvas["width"].as<double>();
-      double height = canvas["height"].as<double>();
       // these are in pixels
       static int thickness = 30;
       static int centralThickness = 60;
@@ -768,8 +844,6 @@ void RenderCanvas()
       DrawFullCircuit(ctx, false, false, false, true);
       break;
     case 7: {
-      double width = canvas["width"].as<double>();
-      double height = canvas["height"].as<double>();
       DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1, audio::get_slowed_current(), "(SLOWED 100x)", false);
       DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, audio::get_current(), "(REAL TIME)", false);
       DrawFullCircuit(ctx, false, false, true, false);
@@ -874,6 +948,13 @@ void addParagraph(emscripten::val sidebar, std::string s) {
   sidebar.call<void>("appendChild", p);
 }
 
+void addBigParagraph(emscripten::val sidebar, std::string s) {
+  emscripten::val p = document.call<emscripten::val>("createElement", emscripten::val("p"));
+  p.set("innerHTML", s);
+  p["classList"].call<void>("add", emscripten::val("big"));
+  sidebar.call<void>("appendChild", p);
+}
+
 void addLabel(emscripten::val sidebar, std::string f, std::string s) {
   emscripten::val l = document.call<emscripten::val>("createElement", emscripten::val("label"));
   l.set("htmlFor", f);
@@ -907,14 +988,34 @@ void InitializePage(int i)
         disablePlayButton();
       }
       enableNextButton();
+      addBigParagraph(info, "Welcome to AnaSynth!");
+      addParagraph(info, "Shown to the left is the classic LC circuit composed of an inductor (L) and a capacitor (C), oscillating 440 times per second (slowed down 1000x for visualization). These oscillations will go on forever, as long as there is 0 resistance in the circuit.");
+      addParagraph(info, "But what if we add a resistor (R) to the circuit, turning the LC circuit into an RLC circuit? The current in RC and RL circuits decrease exponentially as time goes on. But would an RLC circuit also decrease exponentially?");
       break;
-    case (1): {
+    case (1):
+      if (circuitCompleted) {
+        enablePlayButton();
+      } else {
+        disablePlayButton();
+      }
+      enableNextButton();
+      addParagraph(info, "It turns out that the addition of a resistor does indeed decrease the maximum current exponentially, and the current still oscillates!");
+      addParagraph(info, "As a reminder, the time constant of a circuit is the amount of time for the maximum current to decrease by a factor of e.");
+      addParagraph(info,
+                   "After one time constant, the maximum current will be e^-1 of its original maximum current, or about 36.79% of its original volume.");
+      addParagraph(info,
+                   "After two time constants, the maximum current will be e^-2 of its original maximum current, or about 13.53% of its original volume.");
+      addParagraph(info, "Three time constants will have a maximum current of 4.98%, four will have 1.83%, and so on.");
+      addParagraph(info, "The model to the left shows what happens if we repeatedly charge and discharge the capacitator.");
+      break;
+    case (2): {
       emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
       emscripten::val rValue = addInputField("rValue", true, 0.1, 0);
       emscripten::val tValue = addInputField("tValue", true, 0.1, 0);
 
       addParagraph(info, "The time constant, &#120591, of this system is given by the equation");
-      addParagraph(info, "&#120591 = 2L/R");
+      addBigParagraph(info, "&#120591 = 2L/R");
+      addParagraph(info, "The volume (or more specifically, the sound power, which is then put into a logarithmic scale to give the more familiar sound pressure level measured in decibels) of the sound is proportional to the power through the speaker");
       addParagraph(info,
                    "After one time constant, the volume of the sound will be e^-1 of its original volume, or about 36.79% of its original volume.");
       addParagraph(info,
@@ -933,10 +1034,10 @@ void InitializePage(int i)
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "tValue", "&#120591 = ", "left-label");
+      addLabel(info, "tValue", "∴ &#120591 = ", "left-label");
       info.call<emscripten::val>("appendChild", tValue);
       addLabel(info, "tValue", "s");
-      addParagraph(info, "GOAL: &#120591 > 1 s");
+      addBigParagraph(info, "GOAL: &#120591 > 1 s");
       addParagraph(info, "RECOMMENDED: &#120591 > 30 s");
       if (circuitCompleted) {
         enablePlayButton();
@@ -946,14 +1047,6 @@ void InitializePage(int i)
       disableNextButton();
       break;
     }
-    case (2):
-      if (circuitCompleted) {
-        enablePlayButton();
-      } else {
-        disablePlayButton();
-      }
-      enableNextButton();
-      break;
     case (3):
       if (circuitCompleted) {
         enablePlayButton();
@@ -978,10 +1071,10 @@ void InitializePage(int i)
       addLabel(info, "cValue", "F");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "fValue", "f = ", "left-label");
+      addLabel(info, "fValue", "∴ f = ", "left-label");
       info.call<emscripten::val>("appendChild", fValue);
       addLabel(info, "fValue", "Hz");
-      addParagraph(info, "GOAL: f = 440 Hz");
+      addBigParagraph(info, "GOAL: f = 440 Hz");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
@@ -993,7 +1086,7 @@ void InitializePage(int i)
     case (5):
       addParagraph(info,
                    "The current that goes through a speaker powers a solenoid (called a \"voice coil\"), which generates magnetic field according to");
-      addParagraph(info, "B&#8347 = &#956&#8320nI");
+      addBigParagraph(info, "B&#8347 = &#956&#8320nI");
       addParagraph(info, "and attracts or repels the magnet that the solenoid is wrapped around.");
       addParagraph(info,
                    "As the solenoid, which is free floating, pulsates away and towards the magnet, it pulls along the speaker cone attached to it, creating alternating waves of low and high air pressure, which we hear as sound");
@@ -1036,10 +1129,10 @@ void InitializePage(int i)
       addLabel(info, "pValue", "W");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "lpValue", "L<sub style=\"font-size:75%;\">p</sub> = ", "left-label");
+      addLabel(info, "lpValue", "∴ L<sub style=\"font-size:75%;\">p</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", lpValue);
       addLabel(info, "lpValue", "dB");
-      addParagraph(info, "GOAL: ?");
+      addBigParagraph(info, "GOAL: ?");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
@@ -1078,7 +1171,7 @@ void InitializePage(int i)
       addLabel(info, "sensitivityValue", "dB");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "efficiencyValue", "ŋ = ", "left-label");
+      addLabel(info, "efficiencyValue", "∴ ŋ = ", "left-label");
       info.call<emscripten::val>("appendChild", efficiencyValue);
       addLabel(info, "efficiencyValue", "% efficiency");
       enablePlayButton();
@@ -1167,7 +1260,7 @@ void RenderSidebar()
   switch(page) {
     case (0):
       break;
-    case (1): {
+    case (2): {
       emscripten::val inductor = document.call<emscripten::val>("getElementById", emscripten::val("lValue"));
       emscripten::val resistor = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val tConstant = document.call<emscripten::val>("getElementById", emscripten::val("tValue"));
