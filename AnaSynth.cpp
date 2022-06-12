@@ -971,7 +971,7 @@ void addLabel(emscripten::val sidebar, std::string f, std::string s, std::string
 }
 
 void addCapacitorLabelSet(emscripten::val info, emscripten::val cValue, std::string c, std::string number) {
-  addLabel(info, c, "C<sub style=\"font-size:75%;\">" + number +"</sub> = ", "left-label");
+  addLabel(info, c, "C<sub>" + number +"</sub> = ", "left-label");
   info.call<emscripten::val>("appendChild", cValue);
   addLabel(info, c, "F");
 }
@@ -1188,7 +1188,7 @@ void InitializePage(int i)
       addLabel(info, "pValue", "W");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "lpValue", "∴ L<sub style=\"font-size:75%;\">p</sub> = ", "left-label");
+      addLabel(info, "lpValue", "∴ L<sub>p</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", lpValue);
       addLabel(info, "lpValue", "dB");
       addBigParagraph(info, "GOAL: ?");
@@ -1225,7 +1225,7 @@ void InitializePage(int i)
       addLabel(info, "rValue", "&#8486");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "sensitivityValue", "dB<sub style=\"font-size:75%;\">1m</sub> = ", "left-label");
+      addLabel(info, "sensitivityValue", "dB<sub>1m</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", sensitivityValue);
       addLabel(info, "sensitivityValue", "dB");
       addBreak(info);
@@ -1254,55 +1254,55 @@ void InitializePage(int i)
       emscripten::val c13Value = addInputField("c13Value", false, 0.1, 0);
 
       addParagraph(info, "Time to create a scale! Match each frequency as closely as you can.");
-      addLabel(info, "c1Value", "C<sub style=\"font-size:75%;\">4</sub>: 261.63 Hz");
+      addLabel(info, "c1Value", "C<sub>4</sub>: 261.63 Hz");
       addCapacitorLabelSet(info, c1Value, "c1Value", "1");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c2Value", "C#<sub style=\"font-size:75%;\">4</sub>: 277.18 Hz");
+      addLabel(info, "c2Value", "C#<sub>4</sub>: 277.18 Hz");
       addCapacitorLabelSet(info, c2Value, "c2Value", "2");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c3Value", "D<sub style=\"font-size:75%;\">4</sub>: 293.66 Hz");
+      addLabel(info, "c3Value", "D<sub>4</sub>: 293.66 Hz");
       addCapacitorLabelSet(info, c3Value, "c3Value", "3");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c4Value", "D#<sub style=\"font-size:75%;\">4</sub>: 311.13 Hz");
+      addLabel(info, "c4Value", "D#<sub>4</sub>: 311.13 Hz");
       addCapacitorLabelSet(info, c4Value, "c4Value", "4");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c5Value", "E<sub style=\"font-size:75%;\">4</sub>: 329.63 Hz");
+      addLabel(info, "c5Value", "E<sub>4</sub>: 329.63 Hz");
       addCapacitorLabelSet(info, c5Value, "c5Value", "5");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c6Value", "F<sub style=\"font-size:75%;\">4</sub>: 349.23 Hz");
+      addLabel(info, "c6Value", "F<sub>4</sub>: 349.23 Hz");
       addCapacitorLabelSet(info, c6Value, "c6Value", "6");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c7Value", "F#<sub style=\"font-size:75%;\">4</sub>: 369.99 Hz");
+      addLabel(info, "c7Value", "F#<sub>4</sub>: 369.99 Hz");
       addCapacitorLabelSet(info, c7Value, "c7Value", "7");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c8Value", "G<sub style=\"font-size:75%;\">4</sub>: 392.00 Hz");
+      addLabel(info, "c8Value", "G<sub>4</sub>: 392.00 Hz");
       addCapacitorLabelSet(info, c8Value, "c8Value", "8");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c9Value", "G#<sub style=\"font-size:75%;\">4</sub>: 415.30 Hz");
+      addLabel(info, "c9Value", "G#<sub>4</sub>: 415.30 Hz");
       addCapacitorLabelSet(info, c9Value, "c9Value", "9");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c10Value", "A<sub style=\"font-size:75%;\">4</sub>: 440.00 Hz");
+      addLabel(info, "c10Value", "A<sub>4</sub>: 440.00 Hz");
       addCapacitorLabelSet(info, c10Value, "c10Value", "10");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c11Value", "A#<sub style=\"font-size:75%;\">4</sub>: 466.16 Hz");
+      addLabel(info, "c11Value", "A#<sub>4</sub>: 466.16 Hz");
       addCapacitorLabelSet(info, c11Value, "c11Value", "11");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c12Value", "B<sub style=\"font-size:75%;\">4</sub>: 493.88 Hz");
+      addLabel(info, "c12Value", "B<sub>4</sub>: 493.88 Hz");
       addCapacitorLabelSet(info, c12Value, "c12Value", "12");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "c13Value", "C<sub style=\"font-size:75%;\">5</sub>: 523.25 Hz");
+      addLabel(info, "c13Value", "C<sub>5</sub>: 523.25 Hz");
       addCapacitorLabelSet(info, c13Value, "c13Value", "13");
       enablePlayButton();
       enableNextButton();

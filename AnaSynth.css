@@ -9,6 +9,10 @@ body, div {
     font-size: 32px;
 }
 
+sub {
+    font-size: 75%;
+}
+
 canvas {
     cursor: crosshair;
 }
