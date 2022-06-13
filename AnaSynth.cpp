@@ -29,7 +29,7 @@ static int page;
 bool circuitCompleted = false;
 boost::uuids::random_generator uuidGenerator;
 std::vector<boost::uuids::uuid> uuids;
-static double resistance = 4, inductance, capacitance, frequency, watts, volts;
+static double resistance = 4, efficiency = 86.5, inductance = -1, capacitance = -1, frequency = -1, initialVolume = -1, timeConstant = -1, watts = -1, volts = -1;
 static bool playButtonEnabled = false;
 static bool nextButtonEnabled = false;
 
@@ -1432,8 +1432,9 @@ void InitializePage(int i)
       cValue.set("value", capacitance);
       vValue.set("value", volts);
 
+      addParagraph(info, "Adjust your voltage to control the volume. We assume the speaker is 0.5% efficient (audiophiles beware!). dB are being read at 0.55m from the source, because who sits a whole meter away from their speakers? Power is given by");
       addBigParagraph(info, "P = I<sup>2</sup>R = CV<sup>2</sup>/L");
-      addParagraph(info, "Adjust your voltage to control the volume. dB are being read at 0.55m from the source, because who sits a whole meter away from their speakers?");
+      addParagraph(info, "but power through the speaker is not constant, so we multiply it by half to get average power, which then takes into acccount speaker efficiency to get the dB reading.");
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "H");
@@ -1503,7 +1504,7 @@ void InitializePage(int i)
       info.call<emscripten::val>("appendChild", efficiencyValue);
       addLabel(info, "efficiencyValue", "% efficiency");
       disablePlayButton("Please lower the volume.");
-      playButtonEnabled = false;
+      enablePlayButton();
       enableNextButton();
       break;
     }
@@ -1634,8 +1635,7 @@ void RenderSidebar()
           enableNextButton();
           nextButtonEnabled = true;
         }
-        static double previousTimeConstant = 0.0;
-        if (previousTimeConstant != tV) {
+        if (timeConstant != tV) {
           if (audio::get_playing()) {
             PlayOrPauseSound(emscripten::val(""));
           }
@@ -1656,10 +1656,10 @@ void RenderSidebar()
             audio::add_rlcs(removal);
           } else {
             uuid = uuidGenerator();
-            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults = {{uuid, std::make_tuple(1000, tV, 1)}};
+            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults = {{uuid, std::make_tuple(frequency, initialVolume, timeConstant)}};
             audio::add_rlcs(defaults);
           }
-          previousTimeConstant = tV;
+          timeConstant = tV;
           StoreData(page);
         }
       } else if (tV < 1 && nextButtonEnabled) {
@@ -1680,10 +1680,18 @@ void RenderSidebar()
         } else {
           fr.set("value", emscripten::val(f));
           capacitance = stod(capacitor["value"].as<std::string>());
-          frequency = f;
+          if (frequency != f) {
+            frequency = f;
+            if (audio::get_playing()) {
+              PlayOrPauseSound(emscripten::val(""));
+            }
+            audio::remove_all_rlcs();
+            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{{uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
+            audio::add_rlcs(defaults);
+            StoreData(page);
+          }
         }
       }
-      // TODO: frequency adjustment
       break;
     }
     case 6:
@@ -1698,10 +1706,21 @@ void RenderSidebar()
           power.set("value", emscripten::val("Infinity"));
           volume.set("value", emscripten::val("Infinity"));
         } else {
-          power.set("value", emscripten::val(p));
-          volume.set("value", emscripten::val(audio::watts_to_decibels(p / 1000000, 0.55)));
-          watts = p;
-          volts = stod(voltage["value"].as<std::string>());
+          if (watts != p) {
+            if (audio::get_playing()) {
+              PlayOrPauseSound(emscripten::val(""));
+            }
+            power.set("value", emscripten::val(p));
+            volume.set("value", emscripten::val(
+                    audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55)));
+            watts = p;
+            initialVolume = p * audio::decibels_to_watts(efficiency, 1);
+            volts = stod(voltage["value"].as<std::string>());
+            audio::remove_all_rlcs();
+            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{{uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
+            audio::add_rlcs(defaults);
+            StoreData(page);
+          }
         }
       }
       // TODO: initialVolume adjustment
@@ -1711,12 +1730,12 @@ void RenderSidebar()
     {
       emscripten::val rValue = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
-      emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
+      emscripten::val efficiencyVal = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
       double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
-      efficiency.set("value", emscripten::val(efficiencyValue*100));
+      efficiencyVal.set("value", emscripten::val(efficiencyValue*100));
       if (rValue["value"].as<std::string>() != "" && sensitivity["value"].as<std::string>() != "") {
         double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
-        efficiency.set("value", emscripten::val(efficiencyValue*100));
+        efficiencyVal.set("value", emscripten::val(efficiencyValue*100));
         double r = stod(rValue["value"].as<std::string>());
         double t = 2 * inductance / r;
         std::vector<double> f = {frequency};
@@ -1732,19 +1751,20 @@ void RenderSidebar()
         }
 
         static std::vector<double> previousVars;
-        std::vector<double> vars = {watts, r, t};
+        std::vector<double> vars = {watts, r, t, stod(efficiencyVal["value"].as<std::string>())};
         if(previousVars != vars) {
           //audio::set_vars(f, watts/4 * r, t);
           // TODO: set vars
+          efficiency = stod(efficiencyVal["value"].as<std::string>());
+          timeConstant = t;
+          initialVolume = watts * audio::decibels_to_watts(efficiency, 1);
+          audio::remove_all_rlcs();
+          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{{uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
+          audio::add_rlcs(defaults);
           previousVars = vars;
+          StoreData(page);
         }
       }
-      
-      double initialVolume = -1;
-      if (false) {
-        //audio::set_initial_volume(initialVolume);
-      }
-      // TODO: set initial volume
       break;
     }
     case 8:
