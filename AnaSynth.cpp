@@ -994,8 +994,32 @@ void RenderCanvas()
       DrawFourierCircuit(ctx, false, false, false, false);
       break;
     case 11:
-
+    {
+      std::string keys[13] = {"Z", "X", "C", "V", "B", "N", "M", ",", "S", "D", "G", "H", "J"};
+      for(int i = 0; i < 8; i++) {
+        ctx.call<void>("beginPath");
+        ctx.call<void>("rect", width*(0.1 + 0.1*i), height*0.25, width*(0.1), height*0.5);
+        ctx.call<void>("stroke");
+        ctx.call<void>("fillText", keys[i], width*(0.15+0.1*i), height*0.7);
+      }
+      for(int i = 0; i < 2; i++) {
+        ctx.set("fillStyle", emscripten::val("black"));
+        ctx.call<void>("beginPath");
+        ctx.call<void>("rect", width*(0.17 + 0.1*i), height*0.25, width*(0.06), height*0.3);
+        ctx.call<void>("fill");
+        ctx.set("fillStyle", emscripten::val("white"));
+        ctx.call<void>("fillText", keys[i+8], width*(0.2+0.1*i), height*0.5);
+      }
+      for(int i = 0; i < 3; i++) {
+        ctx.set("fillStyle", emscripten::val("black"));
+        ctx.call<void>("beginPath");
+        ctx.call<void>("rect", width*(0.47 + 0.1*i), height*0.25, width*(0.06), height*0.3);
+        ctx.call<void>("fill");
+        ctx.set("fillStyle", emscripten::val("white"));
+        ctx.call<void>("fillText", keys[i+10], width*(0.5+0.1*i), height*0.5);
+      }
       break;
+    }
     default:
       ctx.call<void>("beginPath");
       ctx.call<void>("arc", 200 + 100*sin(FRAME_COUNT/(12*pi)), 150 + 75*sin(FRAME_COUNT/(7.5*pi)), abs(50*sin(FRAME_COUNT/(18*pi))), 0, 2 * pi);
