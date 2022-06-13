@@ -1040,6 +1040,16 @@ void RenderCanvas()
 
   double width = canvas["width"].as<double>();
   double height = canvas["height"].as<double>();
+  static int previewPage = 5;
+  int tmp;
+  if (!audio::initialized) {
+    tmp = page;
+    page = previewPage;
+    if (FRAME_COUNT % 120 == 0) {
+      std::uniform_int_distribution<int> pageDist(0,11);
+      previewPage = pageDist(gen);
+    }
+  }
   switch(page)
   {
     case 0:
@@ -1197,6 +1207,9 @@ void RenderCanvas()
       ctx.call<void>("beginPath");
       ctx.call<void>("arc", 200 + 100*sin(FRAME_COUNT/(12*pi)), 150 + 75*sin(FRAME_COUNT/(7.5*pi)), abs(50*sin(FRAME_COUNT/(18*pi))), 0, 2 * pi);
       ctx.call<void>("stroke");
+  }
+  if (!audio::initialized) {
+    page = tmp;
   }
   FRAME_COUNT++;
 }
