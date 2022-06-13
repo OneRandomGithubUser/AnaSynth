@@ -1744,7 +1744,9 @@ void InitializePage(int i)
       break;
     }
     case (9):
-      addParagraph(info, "And how about some harmonics?");
+      addParagraph(info, "And what if we put multiple LC components together?");
+      addParagraph(info, "The waves now add up!");
+      addParagraph(info, "So how about some harmonics?");
       addParagraph(info, "Quick tip: C + E, C + G, and C + C are harmonious, while C + C# and C + F# are dissonant.");
       addParagraph(info, "Have fun messing around!");
       addBreak(info);
@@ -2021,35 +2023,13 @@ void RenderSidebar()
         if (audio::get_playing()) {
           PlayOrPauseSound(emscripten::val(""));
         }
-        if (uuids.size() >= 2) {
-          std::vector<boost::uuids::uuid> temp;
-          std::vector<boost::uuids::uuid> excess;
-          for (int i = 0; i < freqs.size(); i++)
-          {
-            temp.emplace_back(uuids[i]);
-          }
-          for (auto &oldUuid: uuids) {
-            if (std::find(temp.begin(), temp.end(), oldUuid) == temp.end()) {
-              excess.emplace_back(oldUuid);
-            }
-          }
-          uuids = temp;
-          audio::remove_rlcs(excess);
-          auto removal = audio::remove_rlcs(temp);
-          for (int i = 0; i < freqs.size(); i++) {
-            removal.at(temp[i]) = std::make_tuple(freqs.at(i), std::get<1>(removal.at(temp[i])),
-                                               std::get<2>(removal.at(temp[i])));
-          }
-          audio::add_rlcs(removal);
-        } else {
-          audio::remove_all_rlcs();
-          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
-          for (int i = 0; i < freqs.size(); i++) {
-            boost::uuids::uuid uuid = uuidGenerator();
-            defaults.try_emplace(uuid, std::make_tuple(freqs.at(i), 0.5/i, 1.5));
-          }
-          audio::add_rlcs(defaults);
+        audio::remove_all_rlcs();
+        std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
+        for (auto freq : freqs) {
+          boost::uuids::uuid uuid = uuidGenerator();
+          defaults.try_emplace(uuid, std::make_tuple(freq, 0.5, 1.5));
         }
+        audio::add_rlcs(defaults);
         previousFreqs = freqs;
         StoreData(page);
       }
