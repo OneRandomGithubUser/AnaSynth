@@ -333,6 +333,24 @@ void InteractWithCanvas(emscripten::val event)
   // std::cout << eventName << " " << pageX << " " << pageY << "\n";
 }
 
+void InteractWithKeyboard(emscripten::val event)
+{
+  switch(page) {
+    case(11):
+    {
+      std::string eventName = event["type"].as<std::string>();
+      if(eventName == "keydown") {
+        if(event["keyCode"].as<int>() == 90) {
+          std::cout << "z" << std::endl;
+        }
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 void ResizeCanvas(emscripten::val event)
 {
   emscripten::val canvas = document.call<emscripten::val>("getElementById", emscripten::val("canvas"));
@@ -880,8 +898,7 @@ void RenderCanvas()
     case 2:
       DrawFullCircuit(ctx, false, true, true, false);
       break;
-    // case 2:
-    //   std::cout << "b3" << std::endl;
+    // case 3:
     //   break;
     case 4:
       DrawFullCircuit(ctx, true, true, false, false);
@@ -980,6 +997,9 @@ void RenderCanvas()
       break;
     case 10:
       DrawFourierCircuit(ctx, false, false, false, false);
+      break;
+    case 11:
+
       break;
     default:
       ctx.call<void>("beginPath");
@@ -1611,6 +1631,11 @@ int main() {
   document.call<void>("addEventListener",
                       emscripten::val("mouseup"),
                       emscripten::val::module_property("InteractWithCanvas"));
+                      
+  document.call<void>("addEventListener",
+                      emscripten::val("keydown"),
+                      emscripten::val::module_property("InteractWithKeyboard"));
+
 
   emscripten::val canvas = document.call<emscripten::val>("getElementById", emscripten::val("canvas"));
   emscripten::val ctx = canvas.call<emscripten::val>("getContext", emscripten::val("2d"));
@@ -1635,6 +1660,7 @@ int main() {
 EMSCRIPTEN_BINDINGS(bindings)
 {
   emscripten::function("InteractWithCanvas", InteractWithCanvas);
+  emscripten::function("InteractWithKeyboard", InteractWithKeyboard);
   emscripten::function("ResizeCanvas", ResizeCanvas);
   emscripten::function("SelectPage", SelectPage);
   emscripten::function("NextPage", NextPage);
