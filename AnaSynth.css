@@ -29,6 +29,13 @@ div {
     margin-right: 5px;
 }
 
+.note-label {
+    display: inline-block;
+    width: 80px;
+    text-align: right;
+    margin-right: 5px;
+}
+
 label {
     margin-left: 5px;
 }

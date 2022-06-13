@@ -9,6 +9,7 @@
 #include <optional>
 #include <random>
 #include <vector>
+#include <map>
 
 emscripten::val window = emscripten::val::global("window");
 emscripten::val document = emscripten::val::global("document");
@@ -16,6 +17,22 @@ const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
 bool circuitCompleted = false;
+
+static std::map<std::string, double> frequencyMap = {
+  {"C4", 261.63},
+  {"C#", 277.18},
+  {"D", 293.66},
+  {"D#", 311.13},
+  {"E", 329.63},
+  {"F", 349.23},
+  {"F#", 369.99},
+  {"G", 392.00},
+  {"G#", 415.30},
+  {"A", 440.00},
+  {"A#", 466.16},
+  {"B", 493.88},
+  {"C5", 523.25}
+};
 
 namespace audio
 {
@@ -284,6 +301,18 @@ namespace audio
 
 void PlayOrPauseSound(emscripten::val event)
 {
+  switch(page) {
+    case(9):
+    {
+      emscripten::val note1 = document.call<emscripten::val>("getElementById", emscripten::val("s1"));
+      std::vector<double>freqs = {frequencyMap[note1["value"].as<std::string>()]};
+      std::cout << note1["value"].as<std::string>() << std::endl;
+      audio::set_vars(freqs, 0.5, 1.5);
+      break;
+    }
+    default:
+      break;
+  }
   audio::play_or_pause();
   emscripten::val play = document.call<emscripten::val>("getElementById", emscripten::val("play"));
   if(audio::get_playing()) {
@@ -982,55 +1011,55 @@ void addSelectOctave(emscripten::val info, std::string id) {
   sel.set("name", id);
   info.call<void>("appendChild", sel);
   emscripten::val c = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  c.set("value", "c");
+  c.set("value", "C4");
   c.set("innerHTML", "C4");
   sel.call<void>("appendChild", c);
   emscripten::val cs = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  cs.set("value", "cs");
+  cs.set("value", "C#");
   cs.set("innerHTML", "C#");
   sel.call<void>("appendChild", cs);
   emscripten::val d = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  d.set("value", "d");
+  d.set("value", "D");
   d.set("innerHTML", "D");
   sel.call<void>("appendChild", d);
   emscripten::val ds = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  ds.set("value", "ds");
+  ds.set("value", "D#");
   ds.set("innerHTML", "D#");
   sel.call<void>("appendChild", ds);
   emscripten::val e = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  e.set("value", "e");
+  e.set("value", "E");
   e.set("innerHTML", "E");
   sel.call<void>("appendChild", e);
   emscripten::val f = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  f.set("value", "f");
+  f.set("value", "F");
   f.set("innerHTML", "F");
   sel.call<void>("appendChild", f);
   emscripten::val fs = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  fs.set("value", "fs");
+  fs.set("value", "F#");
   fs.set("innerHTML", "F#");
   sel.call<void>("appendChild", fs);
   emscripten::val g = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  g.set("value", "g");
+  g.set("value", "G");
   g.set("innerHTML", "G");
   sel.call<void>("appendChild", g);
   emscripten::val gs = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  gs.set("value", "gs");
+  gs.set("value", "G#");
   gs.set("innerHTML", "G#");
   sel.call<void>("appendChild", gs);
   emscripten::val a = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  a.set("value", "a");
+  a.set("value", "A");
   a.set("innerHTML", "A");
   sel.call<void>("appendChild", a);
   emscripten::val as = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  as.set("value", "as");
+  as.set("value", "A#");
   as.set("innerHTML", "A#");
   sel.call<void>("appendChild", as);
   emscripten::val b = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  b.set("value", "b");
+  b.set("value", "B");
   b.set("innerHTML", "B");
   sel.call<void>("appendChild", b);
   emscripten::val c2 = document.call<emscripten::val>("createElement", emscripten::val("option"));
-  c2.set("value", "c2");
+  c2.set("value", "C5");
   c2.set("innerHTML", "C5");
   sel.call<void>("appendChild", c2);
 }
@@ -1309,11 +1338,15 @@ void InitializePage(int i)
       break;
     }
     case (9):
-      addLabel(info, "s1", "Note 1:", "left-label");
+      addParagraph(info, "And how about some harmonics?");
+      addParagraph(info, "Quick tip: C + E, C + G, and C + C are harmonious, while C + C# and C + F# are dissonant.");
+      addParagraph(info, "Have fun messing around!");
+      addBreak(info);
+      addLabel(info, "s1", "Note 1:", "note-label");
       addSelectOctave(info, "s1");
       addBreak(info);
       addBreak(info);
-      addLabel(info, "s2", "Note 2:", "left-label");
+      addLabel(info, "s2", "Note 2:", "note-label");
       addSelectOctave(info, "s2");
       break;
     default:
