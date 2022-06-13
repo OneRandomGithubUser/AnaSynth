@@ -964,6 +964,9 @@ void RenderCanvas()
     case 2:
       DrawFullCircuit(ctx, false, true, true, false);
       break;
+    case 3:
+      DrawFullCircuit(ctx, true, true, false, false);
+      break;
     case 4:
       DrawFullCircuit(ctx, true, true, false, false);
       break;
@@ -1380,6 +1383,7 @@ void InitializePage(int i)
         disablePlayButton();
       }
       enableNextButton();
+      addParagraph(info, "Would the frequency of an RLC circuit's oscillations be affected by the resistor? Intuitively, it might make sense to think that the resistor would have \"intertia\" and would slow down the oscillations of the RLC circuit. However, that is surprisingly not the case! Remember: the derivation of the oscillations of an LC circuit looks at the derivative of voltage with respect to time. The voltage across the resistor vanishes.");
       break;
     case (4):
     {
@@ -1398,7 +1402,7 @@ void InitializePage(int i)
       {
         fValue.set("value", emscripten::val(frequency));
       }
-      addParagraph(info, "The frequency of an RLC circuit does not depend on the resistor and is equal to");
+      addParagraph(info, "The frequency of an RLC circuit is equal to");
       addBigParagraph(info, "1/( 2π√(LC) )");
       addParagraph(info, "The limits of human hearing is 20 to 20000 Hz, but depending on your age and the quality of your speakers, you might not be able to hear it if you put it at a high or low pitch!");
       addLabel(info, "cValue", "C = ", "left-label");
