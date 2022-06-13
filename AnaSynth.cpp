@@ -35,7 +35,7 @@ static bool nextButtonEnabled = false;
 
 static std::vector<bool> pianoKeys;
 static std::vector<bool> previousKeys;
-static std::vector<boost::uuids::uuid> pianouuids;
+static std::vector<std::vector<boost::uuids::uuid>> pianouuids;
 
 static const std::map<std::string, double> frequencyMap = {
   {"C4", 261.63},
@@ -1758,6 +1758,8 @@ void InitializePage(int i)
       addBreak(info);
       addLabel(info, "s2", "Note 2:", "note-label");
       addSelectOctave(info, "s2");
+      enablePlayButton();
+      enableNextButton();
       break;
     case (10):
     {
@@ -1767,10 +1769,25 @@ void InitializePage(int i)
       addLabel(info, "fValue", "f = ", "left-label");
       info.call<emscripten::val>("appendChild", fValue);
       addLabel(info, "fValue", "Hz");
+      enablePlayButton();
+      enableNextButton();
       break;
     }
     case(11) :
     {
+      emscripten::val sel = document.call<emscripten::val>("createElement", emscripten::val("select"));
+      sel.set("id", "wave");
+      sel.set("name", "wave");
+      info.call<void>("appendChild", sel);
+      emscripten::val sine = document.call<emscripten::val>("createElement", emscripten::val("option"));
+      sine.set("value", "sine");
+      sine.set("innerHTML", "Sine");
+      sel.call<void>("appendChild", sine);
+      emscripten::val saw = document.call<emscripten::val>("createElement", emscripten::val("option"));
+      saw.set("value", "saw");
+      saw.set("innerHTML", "Saw");
+      sel.call<void>("appendChild", saw);
+
       for(int i = 0; i < 13; i++) {
         pianoKeys.emplace_back(false);
         previousKeys.emplace_back(false);
@@ -1778,11 +1795,17 @@ void InitializePage(int i)
       audio::remove_all_rlcs();
       std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
       for (int i = 0; i < 13; i++) {
-        boost::uuids::uuid uuid = uuidGenerator();
-        defaults.try_emplace(uuid, std::make_tuple(frequencyArray[i], 0.5, 1.5));
-        pianouuids.emplace_back(uuid);
+        std::vector<boost::uuids::uuid> s1;
+        for (int j = 1; j < 11; j++) {
+          boost::uuids::uuid uuid = uuidGenerator();
+          defaults.try_emplace(uuid, std::make_tuple(frequencyArray[i] * j, initialVolume / double(j), timeConstant));
+          s1.emplace_back(uuid);
+        }
+        pianouuids.emplace_back(s1);
       }
       audio::add_rlcs(defaults);
+      enablePlayButton();
+      disableNextButton();
       break;
     }
     default:
@@ -2047,7 +2070,7 @@ void RenderSidebar()
         std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
         for (auto freq : freqs) {
           boost::uuids::uuid uuid = uuidGenerator();
-          defaults.try_emplace(uuid, std::make_tuple(freq, 0.5, 1.5));
+          defaults.try_emplace(uuid, std::make_tuple(freq, initialVolume, timeConstant));
         }
         audio::add_rlcs(defaults);
         previousFreqs = freqs;
@@ -2070,7 +2093,7 @@ void RenderSidebar()
           std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
           for (int i = 1; i < 11; i++) {
             boost::uuids::uuid uuid = uuidGenerator();
-            defaults.try_emplace(uuid, std::make_tuple(fr * i, 0.5 / double(i), 1.5));
+            defaults.try_emplace(uuid, std::make_tuple(fr * i, initialVolume / double(i), timeConstant));
           }
           audio::add_rlcs(defaults);
           previousFr = fr;
@@ -2085,7 +2108,15 @@ void RenderSidebar()
       for(int i = 0; i < 13; i++) {
         if(previousKeys.at(i) != keys.at(i)) {
           // std::cout << i << std::endl;
-          std::vector<boost::uuids::uuid> fr = {pianouuids.at(i)};
+          std::string waveform = document.call<emscripten::val>("getElementById", emscripten::val("wave"))["value"].as<std::string>();
+          std::vector<boost::uuids::uuid> fr;
+          if(waveform == "sine") {
+            fr = {pianouuids.at(i).at(0)};
+          } else if(waveform == "saw") {
+            for(int j = 1; j < 11; j++) {
+              fr.emplace_back(pianouuids.at(i).at(j-1));
+            }
+          }
           // if(keys.at(i)) {
           audio::play_or_stop(fr);
           // } else if(!keys.at(i)) {
