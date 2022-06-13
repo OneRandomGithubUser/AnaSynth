@@ -17,6 +17,7 @@ const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
 bool circuitCompleted = false;
+static double inductance, capacitance;
 
 static const std::map<std::string, double> frequencyMap = {
   {"C4", 261.63},
@@ -1250,18 +1251,20 @@ void InitializePage(int i)
       break;
     case (4):
     {
-      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
-      emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
+      emscripten::val cValue = addInputField("cValue", false, 0.1, 0);
+      emscripten::val lValue = addInputField("lValue", true, 0.1, 0);
       emscripten::val fValue = addInputField("fValue", true, 0.1, 0);
 
+      lValue.set("value", emscripten::val(inductance));
+
+      addLabel(info, "cValue", "C = ", "left-label");
+      info.call<emscripten::val>("appendChild", cValue);
+      addLabel(info, "cValue", "nF");
+      addBreak(info);
+      addBreak(info);
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "H");
-      addBreak(info);
-      addBreak(info);
-      addLabel(info, "cValue", "C = ", "left-label");
-      info.call<emscripten::val>("appendChild", cValue);
-      addLabel(info, "cValue", "F");
       addBreak(info);
       addBreak(info);
       addLabel(info, "fValue", "∴ f = ", "left-label");
@@ -1296,12 +1299,17 @@ void InitializePage(int i)
       break;
     case (6):
     {
-      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
+      emscripten::val lValue = addInputField("lValue", true, 0.1, 0);
       emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
-      emscripten::val vValue = addInputField("vValue", true, 0.1, 0);
+      emscripten::val vValue = addInputField("vValue", false, 0.1, 0);
       emscripten::val pValue = addInputField("pValue", true, 0.1, 0);
       emscripten::val lpValue = addInputField("lpValue", true, 0.1, 0);
+      
+      lValue.set("value", inductance);
+      cValue.set("value", capacitance);
 
+      addBigParagraph(info, "P = I<sup>2</sup>R = CV<sup>2</sup>/L");
+      addParagraph(info, "Adjust your voltage to control the volume. dB are being read at 0.55m from the source.");
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "H");
@@ -1309,23 +1317,23 @@ void InitializePage(int i)
       addBreak(info);
       addLabel(info, "cValue", "C = ", "left-label");
       info.call<emscripten::val>("appendChild", cValue);
-      addLabel(info, "cValue", "F");
+      addLabel(info, "cValue", "nF");
       addBreak(info);
       addBreak(info);
       addLabel(info, "vValue", "v = ", "left-label");
       info.call<emscripten::val>("appendChild", vValue);
-      addLabel(info, "vValue", "V");
+      addLabel(info, "vValue", "mV");
       addBreak(info);
       addBreak(info);
       addLabel(info, "pValue", "P = ", "left-label");
       info.call<emscripten::val>("appendChild", pValue);
-      addLabel(info, "pValue", "W");
+      addLabel(info, "pValue", "&microW");
       addBreak(info);
       addBreak(info);
       addLabel(info, "lpValue", "∴ L<sub>p</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", lpValue);
       addLabel(info, "lpValue", "dB");
-      addBigParagraph(info, "GOAL: ?");
+      addBigParagraph(info, "GOAL: 30-70 dB");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
@@ -1479,6 +1487,7 @@ void RenderSidebar()
         } else {
           tConstant.set("value", emscripten::val(tV));
         }
+        inductance = stod(inductor["value"].as<std::string>());
       }
 
       emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
@@ -1498,9 +1507,41 @@ void RenderSidebar()
     }
     case 4:
     {
+      emscripten::val capacitor = document.call<emscripten::val>("getElementById", emscripten::val("cValue"));
+      emscripten::val fr = document.call<emscripten::val>("getElementById", emscripten::val("fValue"));
+      double f;
+      if (capacitor["value"].as<std::string>() != "") {
+        f = 1 / (2 * pi * sqrt(stod(capacitor["value"].as<std::string>()) / 1000000000 * inductance));
+        if (std::isinf(f)) {
+          fr.set("value", emscripten::val("Infinity"));
+        } else {
+          fr.set("value", emscripten::val(f));
+        }
+        capacitance = stod(capacitor["value"].as<std::string>());
+      }
+
+
       std::vector<double> frequencies{-1};
       if (false) {
         audio::set_frequencies(frequencies);
+      }
+      break;
+    }
+    case 6:
+    {
+      emscripten::val voltage = document.call<emscripten::val>("getElementById", emscripten::val("vValue"));
+      emscripten::val power = document.call<emscripten::val>("getElementById", emscripten::val("pValue"));
+      emscripten::val volume = document.call<emscripten::val>("getElementById", emscripten::val("lpValue"));
+      double p;
+      if (voltage["value"].as<std::string>() != "") {
+        p = capacitance * stod(voltage["value"].as<std::string>()) * stod(voltage["value"].as<std::string>()) / inductance;
+        if (std::isinf(p)) {
+          power.set("value", emscripten::val("Infinity"));
+          volume.set("value", emscripten::val("Infinity"));
+        } else {
+          power.set("value", emscripten::val(p));
+          volume.set("value", emscripten::val(audio::watts_to_decibels(p / 1000000, 0.55)));
+        }
       }
       break;
     }
@@ -1530,6 +1571,8 @@ void RenderSidebar()
       }
       break;
     }
+    case 10:
+      break;
     default:
       break;
   }
