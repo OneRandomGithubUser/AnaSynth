@@ -2,7 +2,14 @@
 #include <emscripten/bind.h>
 #include <emscripten/emscripten.h>
 
+#include <boost/uuid/uuid.hpp>            // uuid class
+#include <boost/uuid/uuid_generators.hpp> // uuid generators
+#include <boost/functional/hash.hpp>      // uuid hashing for maps
+
+// debug
 #include <iostream>
+#include <boost/uuid/uuid_io.hpp>         // uuid streaming operators
+
 #include <numbers>
 #include <cmath>
 #include <vector>
@@ -10,6 +17,9 @@
 #include <random>
 #include <vector>
 #include <map>
+#include <tuple>
+#include <unordered_map>
+#include <algorithm>
 
 emscripten::val window = emscripten::val::global("window");
 emscripten::val document = emscripten::val::global("document");
@@ -17,6 +27,8 @@ const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
 bool circuitCompleted = false;
+boost::uuids::random_generator uuidGenerator;
+std::vector<boost::uuids::uuid> uuids;
 static double resistance = 4, inductance, capacitance, frequency, watts, volts;
 static bool playButtonEnabled = false;
 static bool nextButtonEnabled = false;
@@ -44,19 +56,20 @@ void PlayOrPauseSound(emscripten::val event);
 
 namespace audio
 {
+  // yes i know this should be done with OOP. but no time
   emscripten::val globalAudioContext = emscripten::val::global("AudioContext");
-  std::vector<emscripten::val> oscillators;
   // audioContext is allowed to start only after user interactions, so this must only be created when initialized
   std::optional<emscripten::val> audioContext;
-  std::optional<emscripten::val> gainNode;
-  std::optional<emscripten::val> volumeManager;
-  double TIME_CONSTANT = 1.5; // in seconds
-  double beginTime = 0.0;
+  std::unordered_map<boost::uuids::uuid, emscripten::val, boost::hash<boost::uuids::uuid>> oscillators;
+  std::unordered_map<boost::uuids::uuid, emscripten::val, boost::hash<boost::uuids::uuid>> gainNodes;
+  std::unordered_map<boost::uuids::uuid, emscripten::val, boost::hash<boost::uuids::uuid>> volumeManagers;
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>> timeConstants; // in seconds
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>> beginTimes;
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>> frequencies;
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>> initialVolumes;
+  std::unordered_map<boost::uuids::uuid, int, boost::hash<boost::uuids::uuid>> elapsedTimeConstants;
   bool initialized = false;
   bool playing = false;
-  double initialVolume = 0.5;
-  int timeConstants = 0;
-  std::vector<double> _frequencies;
   /*
   class rlc
   {
@@ -97,25 +110,32 @@ namespace audio
   };*/
   void volume_control()
   {
-    if (audioContext.has_value() && gainNode.has_value())
+    if (audioContext.has_value())
     {
-      // time after play() in seconds. add one TIME_CONSTANT since this is the time at the end of the exponentialRampToValueAtTime
-      double offsetTime = audioContext.value()["currentTime"].as<double>() - beginTime;
-      if (round(offsetTime/TIME_CONSTANT) == timeConstants)
-      {
-        timeConstants = round(offsetTime/TIME_CONSTANT) + 1;
-        if (pow(e, -timeConstants) > 2*pow(10,-45)) // can't exponentialRampToValueAtTime to 0 if timeConstants is too high
-        {
-          std::cout << offsetTime << " sec to " << offsetTime+TIME_CONSTANT << " sec: decrease to volume of " << 100*pow(e, -timeConstants) << "% (e^-" << timeConstants << ") from volume " << gainNode.value()["gain"]["value"].as<double>() << " at " << timeConstants << " time constants\n";
-          gainNode.value()["gain"].call<void>("setValueAtTime", gainNode.value()["gain"]["value"], audioContext.value()["currentTime"]);
-          gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
-                                                         emscripten::val(initialVolume * pow(e, -timeConstants)),
-                                                         emscripten::val(beginTime + offsetTime + TIME_CONSTANT));
+      for (auto& [uuid, gainNode] : gainNodes) {
+        // time after play() in seconds. add one TIME_CONSTANT since this is the time at the end of the exponentialRampToValueAtTime
+        double offsetTime = audioContext.value()["currentTime"].as<double>() - beginTimes.at(uuid);
+        // rounding isn't very accurate but so is TimeInterval TODO
+        if (round(offsetTime / timeConstants.at(uuid)) == elapsedTimeConstants.at(uuid)) {
+          elapsedTimeConstants.at(uuid) = round(offsetTime / timeConstants.at(uuid)) + 1;
+          if (pow(e, -elapsedTimeConstants.at(uuid)) >
+              2 * pow(10, -45)) // can't exponentialRampToValueAtTime to 0 if timeConstants is too high
+          {
+            std::cout << offsetTime << " sec to " << offsetTime + timeConstants.at(uuid) << " sec: decrease to volume of "
+                      << 100 * pow(e, -elapsedTimeConstants.at(uuid)) << "% (e^-" << elapsedTimeConstants.at(uuid) << ") from volume "
+                      << gainNodes.at(uuid)["gain"]["value"].as<double>() << " at " << elapsedTimeConstants.at(uuid)
+                      << " time constants\n";
+            gainNode["gain"].call<void>("setValueAtTime", gainNode["gain"]["value"],
+                                                audioContext.value()["currentTime"]);
+            gainNode["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
+                                                           emscripten::val(initialVolumes.at(uuid) * pow(e, -elapsedTimeConstants.at(uuid))),
+                                                           emscripten::val(beginTimes.at(uuid) + offsetTime + timeConstants.at(uuid)));
+          }
         }
       }
     }
   }
-  void play_or_pause()
+  void play_or_stop_everything()
   {
     if (!initialized)
     {
@@ -123,125 +143,182 @@ namespace audio
       // emscripten currently does not have much support for throwing std::exception
       std::cout << "Error: audio::play() called before audio::initialize()\n";
     }
+    emscripten::val currentTime = audioContext.value()["currentTime"];
     if (playing)
     {
-      // pause
-      emscripten::val currentTime = audioContext.value()["currentTime"];
-      gainNode.value()["gain"].call<void>("cancelScheduledValues", currentTime);
-      for (auto &oscillator: oscillators)
-      {
-        oscillator.call<void>("disconnect", gainNode.value());
+      // stop
+      for (auto& [uuid, oscillator] : oscillators) {
+        gainNodes.at(uuid)["gain"].call<void>("cancelScheduledValues", currentTime);
+        oscillators.at(uuid).call<void>("disconnect", gainNodes.at(uuid));
+        if (volumeManagers.contains(uuid)) {
+          window.call<void>("clearInterval", volumeManagers.at(uuid));
+        }
+        elapsedTimeConstants.at(uuid) = 0;
+        playing = false;
       }
-      window.call<void>("clearInterval", volumeManager.value());
-      timeConstants = 0;
-      playing = false;
+      volumeManagers.clear();
     } else {
       // play
-      for (auto &oscillator: oscillators)
-      {
-        oscillator.call<void>("connect", gainNode.value());
+      for (auto& [uuid, oscillator] : oscillators) {
+        oscillators.at(uuid).call<void>("connect", gainNodes.at(uuid));
+        beginTimes.at(uuid) = currentTime.as<double>();
+        gainNodes.at(uuid)["gain"].set("value", emscripten::val(initialVolumes.at(uuid)));
+        volume_control();
+        volumeManagers.try_emplace(uuid,
+                window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
+                                             emscripten::val(timeConstants.at(uuid) * 1000)));
+        playing = true;
       }
-      beginTime = audioContext.value()["currentTime"].as<double>();
-      // mute sound then go to full volume in 0.05 seconds
-      gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
-      volume_control();
-      volumeManager.emplace(
-              window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
-                                           emscripten::val(TIME_CONSTANT * 1000)));
-      playing = true;
     }
   }
-  void set_frequencies(std::vector<double>& frequencies)
+  void play_or_stop(std::vector<boost::uuids::uuid>& rlcUuids)
   {
-    // if called while sound is playing, pauses the sound
+    if (!initialized)
+    {
+      // This function can be called ONLY after audio::initialize() is called
+      // emscripten currently does not have much support for throwing std::exception
+      std::cout << "Error: audio::play() called before audio::initialize()\n";
+    }
+    emscripten::val currentTime = audioContext.value()["currentTime"];
+    for (auto& uuid : rlcUuids) {
+      if (volumeManagers.contains(uuid)) {
+        // stop
+        gainNodes.at(uuid)["gain"].call<void>("cancelScheduledValues", currentTime);
+        oscillators.at(uuid).call<void>("disconnect", gainNodes.at(uuid));
+        window.call<void>("clearInterval", volumeManagers.at(uuid));
+        volumeManagers.erase(uuid);
+        elapsedTimeConstants.at(uuid) = 0;
+        playing = false;
+      } else {
+        // play
+        oscillators.at(uuid).call<void>("connect", gainNodes.at(uuid));
+        beginTimes.at(uuid) = audioContext.value()["currentTime"].as<double>();
+        gainNodes.at(uuid)["gain"].set("value", emscripten::val(initialVolumes.at(uuid)));
+        volume_control();
+        volumeManagers.try_emplace(uuid,
+                                   window.call<emscripten::val>("setInterval",
+                                                                emscripten::val::module_property("VolumeControl"),
+                                                                emscripten::val(timeConstants.at(uuid) * 1000)));
+        playing = true;
+      }
+    }
+  }
+  void add_rlcs(std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>>& frequenciesStartingVolumesTimeConstants)
+  {
     if (initialized)
     {
-      // This part can be called ONLY after audio::initialize() is called
-      // emscripten currently does not have much support for throwing std::exception
-      if (playing)
+      emscripten::val time = audioContext.value()["currentTime"];
+      for (auto& [uuid, tuple] : frequenciesStartingVolumesTimeConstants)
       {
-        std::cout << "playing\n";
-        PlayOrPauseSound(emscripten::val("dummyVar"));
-      }
-      for (auto &oscillator: oscillators)
-      {
-        oscillator.call<void>("stop");
-      }
-      oscillators.clear();
-      for (auto &frequency: frequencies) {
+        auto [frequency, startingVolume, timeConstant] = tuple;
         emscripten::val oscillator = audioContext.value().call<emscripten::val>("createOscillator");
         oscillator.set("type", emscripten::val("sine"));
         oscillator["frequency"].set("value", emscripten::val(frequency));
-        oscillators.emplace_back(oscillator);
+        oscillators.try_emplace(uuid, oscillator);
+        emscripten::val gainNode = audioContext.value().call<emscripten::val>("createGain");
+        gainNodes.try_emplace(uuid, gainNode);
+        gainNode.call<void>("connect", audioContext.value()["destination"]);
+        timeConstants.try_emplace(uuid, timeConstant);
+        frequencies.try_emplace(uuid, frequency);
+        initialVolumes.try_emplace(uuid, startingVolume);
+        elapsedTimeConstants.try_emplace(uuid, 0);
       }
-      // start the oscillators together
-      for (auto &oscillator: oscillators) {
-        oscillator.call<void>("start");
+      double currentTime = audioContext.value()["currentTime"].as<double>();
+      for (auto& [uuid, tuple] : frequenciesStartingVolumesTimeConstants) {
+        beginTimes.try_emplace(uuid, currentTime);
+        oscillators.at(uuid).call<void>("start");
       }
     }
-    _frequencies = frequencies;
   }
-  void set_initial_volume(double startingVolume)
+  std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> remove_rlcs(std::vector<boost::uuids::uuid>& rlcUuids)
   {
-    initialVolume = startingVolume;
+    std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> ans;
+    for (auto& uuid : rlcUuids) {
+      ans.try_emplace(uuid, std::make_tuple(frequencies.at(uuid), initialVolumes.at(uuid), timeConstants.at(uuid)));
+      if (volumeManagers.contains(uuid))
+      {
+        oscillators.at(uuid).call<void>("disconnect", gainNodes.at(uuid));
+        window.call<void>("clearInterval", volumeManagers.at(uuid));
+        volumeManagers.erase(uuid);
+      }
+      oscillators.at(uuid).call<void>("stop");
+      oscillators.erase(uuid);
+      gainNodes.at(uuid).call<void>("disconnect");
+      gainNodes.erase(uuid);
+      timeConstants.erase(uuid);
+      beginTimes.erase(uuid);
+      frequencies.erase(uuid);
+      initialVolumes.erase(uuid);
+      elapsedTimeConstants.erase(uuid);
+    }
+    return ans;
   }
-  void set_time_constant(double timeConstant)
+  void remove_all_rlcs()
   {
-    TIME_CONSTANT = timeConstant;
-  }
-  void set_vars(std::vector<double>& frequencies, double startingVolume, double timeConstant)
-  {
-    set_frequencies(frequencies);
-    set_initial_volume(startingVolume);
-    set_time_constant(timeConstant);
+    for (auto& [uuid, volumeManager] : volumeManagers)
+    {
+      oscillators.at(uuid).call<void>("disconnect", gainNodes.at(uuid));
+      window.call<void>("clearInterval", volumeManagers.at(uuid));
+    }
+    volumeManagers.clear();
+    for (auto& [uuid, oscillator] : oscillators)
+    {
+      oscillator.call<void>("stop");
+      gainNodes.at(uuid).call<void>("disconnect");
+    }
+    oscillators.clear();
+    gainNodes.clear();
+    timeConstants.clear();
+    beginTimes.clear();
+    frequencies.clear();
+    initialVolumes.clear();
+    elapsedTimeConstants.clear();
   }
   bool get_playing()
   {
     return playing;
   }
-  std::vector<double>& get_frequencies()
+  bool get_rlc_playing(boost::uuids::uuid uuid)
   {
-    return _frequencies;
+    return volumeManagers.contains(uuid);
   }
-  double get_initial_volume()
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>>& get_frequencies()
   {
-    return initialVolume;
+    return frequencies;
   }
-  double get_current_volume()
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>>& get_initial_volumes()
   {
-    if (playing) {
-      return initialVolume * pow(e, -((audioContext.value()["currentTime"].as<double>() - beginTime) / TIME_CONSTANT));
+    return initialVolumes;
+  }
+  std::unordered_map<boost::uuids::uuid, double, boost::hash<boost::uuids::uuid>>& get_time_constants()
+  {
+    return timeConstants;
+  }
+  double get_current_volume(boost::uuids::uuid uuid)
+  {
+    if (volumeManagers.contains(uuid)) {
+      return initialVolumes.at(uuid) * pow(e, -((audioContext.value()["currentTime"].as<double>() - beginTimes.at(uuid)) / timeConstants.at(uuid)));
     } else {
       return 0;
     }
   }
   double get_current()
   {
-    if (playing)
+    double temp = 0.0;
+    for (auto& [uuid, volumeManager] : volumeManagers)
     {
-      double temp = 0.0;
-      for (auto& frequency : _frequencies)
-      {
-        temp += sin(2*pi*frequency*(audioContext.value()["currentTime"].as<double>() - beginTime));
-      }
-      return get_current_volume() * temp;
-    } else {
-      return 0;
+      temp += get_current_volume(uuid) * sin(2*pi*frequencies.at(uuid)*(audioContext.value()["currentTime"].as<double>() - beginTimes.at(uuid)));
     }
+    return temp;
   }
   double get_slowed_current()
   {
-    if (playing)
+    double temp = 0.0;
+    for (auto& [uuid, volumeManager] : volumeManagers)
     {
-      double temp = 0.0;
-      for (auto& frequency : _frequencies)
-      {
-        temp += sin(2*pi*frequency*(audioContext.value()["currentTime"].as<double>() - beginTime)/100);
-      }
-      return get_current_volume() * temp;
-    } else {
-      return 0;
+      temp += get_current_volume(uuid) * sin(2*pi*frequencies.at(uuid)*(audioContext.value()["currentTime"].as<double>() - beginTimes.at(uuid)))/100;
     }
+    return temp;
   }
   double get_example_current()
   {
@@ -272,10 +349,6 @@ namespace audio
       return sin(2*pi*440*(currentTime/100)) * pow(e, -cycle);
     }
   }
-  double get_time_constant()
-  {
-    return TIME_CONSTANT;
-  }
   void initialize()
   {
     // because you cannot create audioContext until user interaction with the page, a rule enforced by browsers
@@ -283,10 +356,7 @@ namespace audio
     {
       emscripten::val baseAudioContext = globalAudioContext.new_();
       audioContext.emplace(baseAudioContext);
-      gainNode.emplace(audioContext.value().call<emscripten::val>("createGain"));
-      gainNode.value().call<void>("connect", audioContext.value()["destination"]); // connect gainNode to audio output
       initialized = true;
-      set_frequencies(_frequencies);
     }
   }
   double watts_to_decibels(double power, double distance)
@@ -311,7 +381,7 @@ namespace audio
 
 void PlayOrPauseSound(emscripten::val event)
 {
-  audio::play_or_pause();
+  audio::play_or_stop_everything();
   emscripten::val play = document.call<emscripten::val>("getElementById", emscripten::val("play"));
   if(audio::get_playing()) {
     play.set("innerHTML", "PAUSE");
@@ -476,7 +546,7 @@ void DrawBattery(emscripten::val ctx, int x, int y, bool highlight) {
     ctx.set("lineWidth", emscripten::val(1));
   }
 }
-void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double pixelsAtVolume1, double current, std::string label, bool highlight)
+void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double arrowLength, std::string label, bool highlight)
 {
   // NOTE: this must be placed on a TOP edge, also this assumes 60 fps TODO
   if (highlight)
@@ -493,15 +563,16 @@ void DrawCurrent(emscripten::val ctx, double x, double y, double spacing, double
                                                                                               "CURRENT"))["actualBoundingBoxDescent"].as<double>());
 
   ctx.call<void>("beginPath");
-  ctx.call<void>("moveTo", x, y + spacing);
-  double arrowLength = audio::get_initial_volume() * pixelsAtVolume1 * current;
-  ctx.call<void>("lineTo", x + arrowLength, y + spacing);
   if (arrowLength > 0)
   {
+    ctx.call<void>("moveTo", x, y + spacing);
+    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
     ctx.call<void>("moveTo", x + arrowLength - spacing/2.0, y + spacing/2.0);
     ctx.call<void>("lineTo", x + arrowLength, y + spacing);
     ctx.call<void>("lineTo", x + arrowLength - spacing/2.0, y + 3*spacing/2.0);
   } else if (arrowLength < 0) {
+    ctx.call<void>("moveTo", x, y + spacing);
+    ctx.call<void>("lineTo", x + arrowLength, y + spacing);
     ctx.call<void>("moveTo", x + arrowLength + spacing/2.0, y + spacing/2.0);
     ctx.call<void>("lineTo", x + arrowLength, y + spacing);
     ctx.call<void>("lineTo", x + arrowLength + spacing/2.0, y + 3*spacing/2.0);
@@ -564,8 +635,8 @@ void DrawExampleCircuit(emscripten::val ctx, bool highlightCapacitor, bool highl
     ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.5 - 20);
   }
   ctx.call<void>("stroke");
-  DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1, audio::get_slowed_example_rc_current(), "(SLOWED 100x)", false);
-  DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, current, "(REAL TIME)", false);
+  DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1 * audio::get_slowed_example_rc_current(), "(SLOWED 100x)", false);
+  DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1 * current, "(REAL TIME)", false);
 }
 
 void DrawFullCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
@@ -885,7 +956,7 @@ void RenderCanvas()
       ctx.call<void>("lineTo", 130, 400);
       ctx.call<void>("lineTo", 170, 400);
       ctx.call<void>("stroke");
-      DrawCurrent(ctx, 280, 200, 10, 150, audio::get_example_current(), "(SLOWED 1000x)", false);
+      DrawCurrent(ctx, 280, 200, 10, 150 * audio::get_example_current(), "(SLOWED 1000x)", false);
       break;
     case 1:
       DrawExampleCircuit(ctx, false, false, true, false);
@@ -893,8 +964,6 @@ void RenderCanvas()
     case 2:
       DrawFullCircuit(ctx, false, true, true, false);
       break;
-    // case 3:
-    //   break;
     case 4:
       DrawFullCircuit(ctx, true, true, false, false);
       break;
@@ -971,15 +1040,15 @@ void RenderCanvas()
       ctx.call<void>("fillText", emscripten::val("S"), width * 0.5, height * 0.5 + width * 0.15 - thickness*1.5);
       ctx.call<void>("fillText", emscripten::val("N"), width * 0.2 + thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
       ctx.call<void>("fillText", emscripten::val("N"), width * 0.8 - thickness*1.5, height * 0.5 + width * 0.15 - thickness*1.5);
-      DrawCurrent(ctx, width*0.1, height*0.5, 10, width * 0.1, current, "(SLOWED 1000x)", false);
+      DrawCurrent(ctx, width*0.1, height*0.5, 10, width * 0.1 * current, "(SLOWED 1000x)", false);
       break;
     }
     case 6:
       DrawFullCircuit(ctx, false, false, false, true);
       break;
     case 7: {
-      DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1, audio::get_slowed_current(), "(SLOWED 100x)", false);
-      DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1, audio::get_current(), "(REAL TIME)", false);
+      DrawCurrent(ctx, width * 0.5, height * 0.2, 10, width * 0.1 * audio::get_slowed_current(), "(SLOWED 100x)", false);
+      DrawCurrent(ctx, width * 0.7, height * 0.2, 10, width * 0.1 * audio::get_current(), "(REAL TIME)", false);
       DrawFullCircuit(ctx, false, false, true, false);
       break;
     }
@@ -1534,6 +1603,8 @@ void InitializePage(int i)
   }
 }
 
+void StoreData(int page); // forward declaration
+
 void RenderSidebar()
 {
   switch(page) {
@@ -1563,7 +1634,34 @@ void RenderSidebar()
           enableNextButton();
           nextButtonEnabled = true;
         }
-        audio::set_time_constant(tV);
+        static double previousTimeConstant = 0.0;
+        if (previousTimeConstant != tV) {
+          if (audio::get_playing()) {
+            PlayOrPauseSound(emscripten::val(""));
+          }
+          boost::uuids::uuid uuid;
+          if (uuids.size() >= 1) {
+            uuid = uuids[0];
+            std::vector<boost::uuids::uuid> temp = {uuid};
+            std::vector<boost::uuids::uuid> excess;
+            for (auto &oldUuid: uuids) {
+              if (oldUuid != uuid) {
+                excess.emplace_back(oldUuid);
+              }
+            }
+            audio::remove_rlcs(excess);
+            uuids = temp;
+            auto removal = audio::remove_rlcs(temp);
+            removal.at(uuid) = std::make_tuple(std::get<0>(removal.at(uuid)), tV, std::get<2>(removal.at(uuid)));
+            audio::add_rlcs(removal);
+          } else {
+            uuid = uuidGenerator();
+            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults = {{uuid, std::make_tuple(1000, tV, 1)}};
+            audio::add_rlcs(defaults);
+          }
+          previousTimeConstant = tV;
+          StoreData(page);
+        }
       } else if (tV < 1 && nextButtonEnabled) {
         disableNextButton();
         nextButtonEnabled = false;
@@ -1585,12 +1683,7 @@ void RenderSidebar()
           frequency = f;
         }
       }
-
-
-      std::vector<double> frequencies{-1};
-      if (false) {
-        audio::set_frequencies(frequencies);
-      }
+      // TODO: frequency adjustment
       break;
     }
     case 6:
@@ -1611,6 +1704,7 @@ void RenderSidebar()
           volts = stod(voltage["value"].as<std::string>());
         }
       }
+      // TODO: initialVolume adjustment
       break;
     }
     case 7:
@@ -1618,8 +1712,9 @@ void RenderSidebar()
       emscripten::val rValue = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
       emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
-
-      if(rValue["value"].as<std::string>() != "" && sensitivity["value"].as<std::string>() != "") {
+      double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
+      efficiency.set("value", emscripten::val(efficiencyValue*100));
+      if (rValue["value"].as<std::string>() != "" && sensitivity["value"].as<std::string>() != "") {
         double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
         efficiency.set("value", emscripten::val(efficiencyValue*100));
         double r = stod(rValue["value"].as<std::string>());
@@ -1639,15 +1734,17 @@ void RenderSidebar()
         static std::vector<double> previousVars;
         std::vector<double> vars = {watts, r, t};
         if(previousVars != vars) {
-          audio::set_vars(f, watts/4 * r, t);
+          //audio::set_vars(f, watts/4 * r, t);
+          // TODO: set vars
           previousVars = vars;
         }
       }
       
       double initialVolume = -1;
       if (false) {
-        audio::set_initial_volume(initialVolume);
+        //audio::set_initial_volume(initialVolume);
       }
+      // TODO: set initial volume
       break;
     }
     case 8:
@@ -1699,7 +1796,7 @@ void RenderSidebar()
         default:
           break;
       }
-      if(document.call<emscripten::val>("getElementById", "c" + std::to_string(counter) + "Value")["value"].as<std::string>() != "") {
+      if (document.call<emscripten::val>("getElementById", "c" + std::to_string(counter) + "Value")["value"].as<std::string>() != "") {
         cv = stod(document.call<emscripten::val>("getElementById", "c" + std::to_string(counter) + "Value")["value"].as<std::string>());
         double f = 1 / (2 * pi * sqrt(cv / 1000000000 * inductance));
         fValue.set("value", f);
@@ -1708,7 +1805,8 @@ void RenderSidebar()
         if (previousVars != vars)
         {
           std::vector<double>freqs = {f};
-          audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
+          //audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
+          // TODO: set vars
           previousVars = vars;
         }
 
@@ -1727,11 +1825,46 @@ void RenderSidebar()
       static std::vector<double> previousFreqs;
       std::vector<double>freqs = {frequencyMap.at(document.call<emscripten::val>("getElementById", emscripten::val("s1"))["value"].as<std::string>())};
       freqs.emplace_back(frequencyMap.at(document.call<emscripten::val>("getElementById", emscripten::val("s2"))["value"].as<std::string>()));
-      if (previousFreqs != freqs)
-      {
-        audio::set_vars(freqs, 0.5, 1.5);
+
+
+      if (previousFreqs != freqs) {
+        if (audio::get_playing()) {
+          PlayOrPauseSound(emscripten::val(""));
+        }
+        if (uuids.size() >= 2) {
+          std::vector<boost::uuids::uuid> temp;
+          std::vector<boost::uuids::uuid> excess;
+          for (int i = 0; i < freqs.size(); i++)
+          {
+            temp.emplace_back(uuids[i]);
+          }
+          for (auto &oldUuid: uuids) {
+            if (std::find(temp.begin(), temp.end(), oldUuid) == temp.end()) {
+              excess.emplace_back(oldUuid);
+            }
+          }
+          uuids = temp;
+          audio::remove_rlcs(excess);
+          auto removal = audio::remove_rlcs(temp);
+          for (int i = 0; i < freqs.size(); i++) {
+            removal.at(temp[i]) = std::make_tuple(freqs.at(i), std::get<1>(removal.at(temp[i])),
+                                               std::get<2>(removal.at(temp[i])));
+          }
+          audio::add_rlcs(removal);
+        } else {
+          audio::remove_all_rlcs();
+          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
+          for (int i = 0; i < freqs.size(); i++) {
+            boost::uuids::uuid uuid = uuidGenerator();
+            defaults.try_emplace(uuid, std::make_tuple(freqs.at(i), 0.5, 1.5));
+          }
+          audio::add_rlcs(defaults);
+        }
         previousFreqs = freqs;
+        StoreData(page);
       }
+
+
       break;
     }
     case 10:
@@ -1741,18 +1874,11 @@ void RenderSidebar()
   }
 }
 
-void CloseIntro(emscripten::val event) {
-  document.call<emscripten::val>("getElementById", emscripten::val("blur")).call<void>("remove", emscripten::val("mouseup"));
-  audio::initialize();
-}
-
 void Render()
 {
   RenderCanvas();
   RenderSidebar();
 }
-
-void StoreData(int page); // forward declaration
 
 extern "C"
 {
@@ -1773,50 +1899,96 @@ void StoreData(int page)
 {
   emscripten::val localStorage = emscripten::val::global("localStorage");
   localStorage.call<void>("setItem", emscripten::val("selectedPage"), emscripten::val(page));
-  localStorage.call<void>("setItem", emscripten::val("timeConstant"), emscripten::val(audio::get_time_constant()));
-  localStorage.call<void>("setItem", emscripten::val("initialVolume"), emscripten::val(audio::get_initial_volume()));
   std::string temp = "";
-  for (auto& frequency : audio::get_frequencies())
+  for (auto& [uuid, frequency] : audio::get_frequencies())
   {
     temp += std::to_string(frequency);
     temp += ",";
   }
+  if (temp.length() != 0) {
+    temp.pop_back();
+  }
   localStorage.call<void>("setItem", emscripten::val("frequencies"), emscripten::val(temp));
+  temp = "";
+  for (auto& [uuid, initialVolume] : audio::get_initial_volumes())
+  {
+    temp += std::to_string(initialVolume);
+    temp += ",";
+  }
+  if (temp.length() != 0) {
+    temp.pop_back();
+  }
+  localStorage.call<void>("setItem", emscripten::val("initialVolumes"), emscripten::val(temp));
+  temp = "";
+  for (auto& [uuid, timeConstant] : audio::get_time_constants())
+  {
+    temp += std::to_string(timeConstant);
+    temp += ",";
+  }
+  if (temp.length() != 0) {
+    temp.pop_back();
+  }
+  localStorage.call<void>("setItem", emscripten::val("timeConstants"), emscripten::val(temp));
 }
 
 void RetrieveData()
 {
   emscripten::val localStorage = emscripten::val::global("localStorage");
   emscripten::val pageNumber = localStorage.call<emscripten::val>("getItem", emscripten::val("selectedPage"));
-  emscripten::val timeConstant = localStorage.call<emscripten::val>("getItem", emscripten::val("timeConstant"));
-  emscripten::val initialVolume = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolume"));
-  emscripten::val frequencies = localStorage.call<emscripten::val>("getItem", emscripten::val("frequencies"));
+  emscripten::val timeConstant = localStorage.call<emscripten::val>("getItem", emscripten::val("timeConstants"));
+  emscripten::val initialVolume = localStorage.call<emscripten::val>("getItem", emscripten::val("initialVolumes"));
+  emscripten::val frequency = localStorage.call<emscripten::val>("getItem", emscripten::val("frequencies"));
   // checks if there is such a stored value: typeOf will be "object" when the emscripten::val is null
-  if (timeConstant.typeOf().as<std::string>() == "string") {
-    audio::set_time_constant(std::stod(timeConstant.as<std::string>()));
-  } else {
-    audio::set_time_constant(1.5);
-  }
-  if (initialVolume.typeOf().as<std::string>() == "string") {
-    audio::set_initial_volume(std::stod(initialVolume.as<std::string>()));
-  } else {
-    audio::set_initial_volume(0.5);
-  }
-  if (frequencies.typeOf().as<std::string>() == "string") {
-    std::string frequenciesString = frequencies.as<std::string>();
-    std::vector<double> temp;
+
+  std::vector<double> frequencies;
+  std::vector<double> initialVolumes;
+  std::vector<double> timeConstants;
+  if (frequency.typeOf().as<std::string>() == "string") {
+    std::string frequenciesString = frequency.as<std::string>();
     while (frequenciesString != "")
     {
       int pos = frequenciesString.find(",");
-      if (pos == std::string::npos) {break;}
-      temp.push_back(std::stod(frequenciesString.substr(0, pos)));
+      frequencies.push_back(std::stod(frequenciesString.substr(0, pos)));
       frequenciesString = frequenciesString.substr(pos+1);
+      if (pos == std::string::npos) {break;}
     }
-    audio::set_frequencies(temp);
   } else {
-    std::vector<double> defaultFrequencies{261.63, 329.63, 392.00}; // C major chord
-    audio::set_frequencies(defaultFrequencies);
+    frequencies = {261.63, 329.63, 392.00}; // C major chord
   }
+  if (initialVolume.typeOf().as<std::string>() == "string") {
+    std::string string = initialVolume.as<std::string>();
+    while (string != "")
+    {
+      int pos = string.find(",");
+      initialVolumes.push_back(std::stod(string.substr(0, pos)));
+      string = string.substr(pos+1);
+      if (pos == std::string::npos) {break;}
+    }
+  } else {
+    initialVolumes = {0.3, 0.3, 0.3};
+  }
+  if (timeConstant.typeOf().as<std::string>() == "string") {
+    std::string string = timeConstant.as<std::string>();
+    while (string != "")
+    {
+      int pos = string.find(",");
+      timeConstants.push_back(std::stod(string.substr(0, pos)));
+      string = string.substr(pos+1);
+      if (pos == std::string::npos) {break;}
+    }
+  } else {
+    timeConstants = {1.5, 1.5, 1.5};
+  }
+
+  std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> insertion;
+  for (int i = 0; i < frequencies.size(); i++)
+  {
+    boost::uuids::uuid uuid = uuidGenerator();
+    uuids.emplace_back(uuid);
+    insertion.try_emplace(uuid, std::make_tuple(frequencies.at(i), initialVolumes.at(i), timeConstants.at(i)));
+  }
+  audio::add_rlcs(insertion);
+
   if (pageNumber.typeOf().as<std::string>() == "string") {
     int page = std::stoi(pageNumber.as<std::string>());
     SelectPage(page);
@@ -1825,6 +1997,13 @@ void RetrieveData()
     SelectPage(0);
     document.call<emscripten::val>("getElementById", emscripten::val("b1")).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   }
+}
+
+void CloseIntro(emscripten::val event) {
+  document.call<emscripten::val>("getElementById", emscripten::val("blur")).call<void>("remove", emscripten::val("mouseup"));
+  audio::initialize();
+  RetrieveData();
+  StoreData(page);
 }
 
 int main() {
@@ -1854,8 +2033,6 @@ int main() {
   document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
   document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
   document.call<emscripten::val>("getElementById", emscripten::val("intro-button")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("CloseIntro"));
-  RetrieveData();
-  StoreData(page);
 
   // must be the last command in main()
   emscripten_set_main_loop(Render, 0, 1);
