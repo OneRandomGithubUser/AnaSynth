@@ -2066,1963 +2066,6 @@ var ASM_CONSTS = {
     }
 
 
-  function __embind_register_bigint(primitiveType, name, size, minRange, maxRange) {}
-
-  function getShiftFromSize(size) {
-      switch (size) {
-          case 1: return 0;
-          case 2: return 1;
-          case 4: return 2;
-          case 8: return 3;
-          default:
-              throw new TypeError('Unknown type size: ' + size);
-      }
-    }
-  
-  function embind_init_charCodes() {
-      var codes = new Array(256);
-      for (var i = 0; i < 256; ++i) {
-          codes[i] = String.fromCharCode(i);
-      }
-      embind_charCodes = codes;
-    }
-  var embind_charCodes = undefined;
-  function readLatin1String(ptr) {
-      var ret = "";
-      var c = ptr;
-      while (HEAPU8[c]) {
-          ret += embind_charCodes[HEAPU8[c++]];
-      }
-      return ret;
-    }
-  
-  var awaitingDependencies = {};
-  
-  var registeredTypes = {};
-  
-  var typeDependencies = {};
-  
-  var char_0 = 48;
-  
-  var char_9 = 57;
-  function makeLegalFunctionName(name) {
-      if (undefined === name) {
-        return '_unknown';
-      }
-      name = name.replace(/[^a-zA-Z0-9_]/g, '$');
-      var f = name.charCodeAt(0);
-      if (f >= char_0 && f <= char_9) {
-        return '_' + name;
-      }
-      return name;
-    }
-  function createNamedFunction(name, body) {
-      name = makeLegalFunctionName(name);
-      /*jshint evil:true*/
-      return new Function(
-          "body",
-          "return function " + name + "() {\n" +
-          "    \"use strict\";" +
-          "    return body.apply(this, arguments);\n" +
-          "};\n"
-      )(body);
-    }
-  function extendError(baseErrorType, errorName) {
-      var errorClass = createNamedFunction(errorName, function(message) {
-          this.name = errorName;
-          this.message = message;
-  
-          var stack = (new Error(message)).stack;
-          if (stack !== undefined) {
-              this.stack = this.toString() + '\n' +
-                  stack.replace(/^Error(:[^\n]*)?\n/, '');
-          }
-      });
-      errorClass.prototype = Object.create(baseErrorType.prototype);
-      errorClass.prototype.constructor = errorClass;
-      errorClass.prototype.toString = function() {
-          if (this.message === undefined) {
-              return this.name;
-          } else {
-              return this.name + ': ' + this.message;
-          }
-      };
-  
-      return errorClass;
-    }
-  var BindingError = undefined;
-  function throwBindingError(message) {
-      throw new BindingError(message);
-    }
-  
-  var InternalError = undefined;
-  function throwInternalError(message) {
-      throw new InternalError(message);
-    }
-  function whenDependentTypesAreResolved(myTypes, dependentTypes, getTypeConverters) {
-      myTypes.forEach(function(type) {
-          typeDependencies[type] = dependentTypes;
-      });
-  
-      function onComplete(typeConverters) {
-          var myTypeConverters = getTypeConverters(typeConverters);
-          if (myTypeConverters.length !== myTypes.length) {
-              throwInternalError('Mismatched type converter count');
-          }
-          for (var i = 0; i < myTypes.length; ++i) {
-              registerType(myTypes[i], myTypeConverters[i]);
-          }
-      }
-  
-      var typeConverters = new Array(dependentTypes.length);
-      var unregisteredTypes = [];
-      var registered = 0;
-      dependentTypes.forEach((dt, i) => {
-        if (registeredTypes.hasOwnProperty(dt)) {
-          typeConverters[i] = registeredTypes[dt];
-        } else {
-          unregisteredTypes.push(dt);
-          if (!awaitingDependencies.hasOwnProperty(dt)) {
-            awaitingDependencies[dt] = [];
-          }
-          awaitingDependencies[dt].push(() => {
-            typeConverters[i] = registeredTypes[dt];
-            ++registered;
-            if (registered === unregisteredTypes.length) {
-              onComplete(typeConverters);
-            }
-          });
-        }
-      });
-      if (0 === unregisteredTypes.length) {
-        onComplete(typeConverters);
-      }
-    }
-  /** @param {Object=} options */
-  function registerType(rawType, registeredInstance, options = {}) {
-      if (!('argPackAdvance' in registeredInstance)) {
-          throw new TypeError('registerType registeredInstance requires argPackAdvance');
-      }
-  
-      var name = registeredInstance.name;
-      if (!rawType) {
-          throwBindingError('type "' + name + '" must have a positive integer typeid pointer');
-      }
-      if (registeredTypes.hasOwnProperty(rawType)) {
-          if (options.ignoreDuplicateRegistrations) {
-              return;
-          } else {
-              throwBindingError("Cannot register type '" + name + "' twice");
-          }
-      }
-  
-      registeredTypes[rawType] = registeredInstance;
-      delete typeDependencies[rawType];
-  
-      if (awaitingDependencies.hasOwnProperty(rawType)) {
-        var callbacks = awaitingDependencies[rawType];
-        delete awaitingDependencies[rawType];
-        callbacks.forEach((cb) => cb());
-      }
-    }
-  function __embind_register_bool(rawType, name, size, trueValue, falseValue) {
-      var shift = getShiftFromSize(size);
-  
-      name = readLatin1String(name);
-      registerType(rawType, {
-          name: name,
-          'fromWireType': function(wt) {
-              // ambiguous emscripten ABI: sometimes return values are
-              // true or false, and sometimes integers (0 or 1)
-              return !!wt;
-          },
-          'toWireType': function(destructors, o) {
-              return o ? trueValue : falseValue;
-          },
-          'argPackAdvance': 8,
-          'readValueFromPointer': function(pointer) {
-              // TODO: if heap is fixed (like in asm.js) this could be executed outside
-              var heap;
-              if (size === 1) {
-                  heap = HEAP8;
-              } else if (size === 2) {
-                  heap = HEAP16;
-              } else if (size === 4) {
-                  heap = HEAP32;
-              } else {
-                  throw new TypeError("Unknown boolean type size: " + name);
-              }
-              return this['fromWireType'](heap[pointer >> shift]);
-          },
-          destructorFunction: null, // This type does not need a destructor
-      });
-    }
-
-  var emval_free_list = [];
-  
-  var emval_handle_array = [{},{value:undefined},{value:null},{value:true},{value:false}];
-  function __emval_decref(handle) {
-      if (handle > 4 && 0 === --emval_handle_array[handle].refcount) {
-        emval_handle_array[handle] = undefined;
-        emval_free_list.push(handle);
-      }
-    }
-  
-  function count_emval_handles() {
-      var count = 0;
-      for (var i = 5; i < emval_handle_array.length; ++i) {
-        if (emval_handle_array[i] !== undefined) {
-          ++count;
-        }
-      }
-      return count;
-    }
-  
-  function get_first_emval() {
-      for (var i = 5; i < emval_handle_array.length; ++i) {
-        if (emval_handle_array[i] !== undefined) {
-          return emval_handle_array[i];
-        }
-      }
-      return null;
-    }
-  function init_emval() {
-      Module['count_emval_handles'] = count_emval_handles;
-      Module['get_first_emval'] = get_first_emval;
-    }
-  var Emval = {toValue:(handle) => {
-        if (!handle) {
-            throwBindingError('Cannot use deleted val. handle = ' + handle);
-        }
-        return emval_handle_array[handle].value;
-      },toHandle:(value) => {
-        switch (value) {
-          case undefined: return 1;
-          case null: return 2;
-          case true: return 3;
-          case false: return 4;
-          default:{
-            var handle = emval_free_list.length ?
-                emval_free_list.pop() :
-                emval_handle_array.length;
-  
-            emval_handle_array[handle] = {refcount: 1, value: value};
-            return handle;
-          }
-        }
-      }};
-  
-  function simpleReadValueFromPointer(pointer) {
-      return this['fromWireType'](HEAPU32[pointer >> 2]);
-    }
-  function __embind_register_emval(rawType, name) {
-      name = readLatin1String(name);
-      registerType(rawType, {
-        name: name,
-        'fromWireType': function(handle) {
-          var rv = Emval.toValue(handle);
-          __emval_decref(handle);
-          return rv;
-        },
-        'toWireType': function(destructors, value) {
-          return Emval.toHandle(value);
-        },
-        'argPackAdvance': 8,
-        'readValueFromPointer': simpleReadValueFromPointer,
-        destructorFunction: null, // This type does not need a destructor
-  
-        // TODO: do we need a deleteObject here?  write a test where
-        // emval is passed into JS via an interface
-      });
-    }
-
-  function _embind_repr(v) {
-      if (v === null) {
-          return 'null';
-      }
-      var t = typeof v;
-      if (t === 'object' || t === 'array' || t === 'function') {
-          return v.toString();
-      } else {
-          return '' + v;
-      }
-    }
-  
-  function floatReadValueFromPointer(name, shift) {
-      switch (shift) {
-          case 2: return function(pointer) {
-              return this['fromWireType'](HEAPF32[pointer >> 2]);
-          };
-          case 3: return function(pointer) {
-              return this['fromWireType'](HEAPF64[pointer >> 3]);
-          };
-          default:
-              throw new TypeError("Unknown float type: " + name);
-      }
-    }
-  function __embind_register_float(rawType, name, size) {
-      var shift = getShiftFromSize(size);
-      name = readLatin1String(name);
-      registerType(rawType, {
-          name: name,
-          'fromWireType': function(value) {
-               return value;
-          },
-          'toWireType': function(destructors, value) {
-              if (typeof value != "number" && typeof value != "boolean") {
-                  throw new TypeError('Cannot convert "' + _embind_repr(value) + '" to ' + this.name);
-              }
-              // The VM will perform JS to Wasm value conversion, according to the spec:
-              // https://www.w3.org/TR/wasm-js-api-1/#towebassemblyvalue
-              return value;
-          },
-          'argPackAdvance': 8,
-          'readValueFromPointer': floatReadValueFromPointer(name, shift),
-          destructorFunction: null, // This type does not need a destructor
-      });
-    }
-
-  function new_(constructor, argumentList) {
-      if (!(constructor instanceof Function)) {
-        throw new TypeError('new_ called with constructor type ' + typeof(constructor) + " which is not a function");
-      }
-      /*
-       * Previously, the following line was just:
-       *   function dummy() {};
-       * Unfortunately, Chrome was preserving 'dummy' as the object's name, even
-       * though at creation, the 'dummy' has the correct constructor name.  Thus,
-       * objects created with IMVU.new would show up in the debugger as 'dummy',
-       * which isn't very helpful.  Using IMVU.createNamedFunction addresses the
-       * issue.  Doublely-unfortunately, there's no way to write a test for this
-       * behavior.  -NRD 2013.02.22
-       */
-      var dummy = createNamedFunction(constructor.name || 'unknownFunctionName', function(){});
-      dummy.prototype = constructor.prototype;
-      var obj = new dummy;
-  
-      var r = constructor.apply(obj, argumentList);
-      return (r instanceof Object) ? r : obj;
-    }
-  
-  function runDestructors(destructors) {
-      while (destructors.length) {
-        var ptr = destructors.pop();
-        var del = destructors.pop();
-        del(ptr);
-      }
-    }
-  function craftInvokerFunction(humanName, argTypes, classType, cppInvokerFunc, cppTargetFunc) {
-      // humanName: a human-readable string name for the function to be generated.
-      // argTypes: An array that contains the embind type objects for all types in the function signature.
-      //    argTypes[0] is the type object for the function return value.
-      //    argTypes[1] is the type object for function this object/class type, or null if not crafting an invoker for a class method.
-      //    argTypes[2...] are the actual function parameters.
-      // classType: The embind type object for the class to be bound, or null if this is not a method of a class.
-      // cppInvokerFunc: JS Function object to the C++-side function that interops into C++ code.
-      // cppTargetFunc: Function pointer (an integer to FUNCTION_TABLE) to the target C++ function the cppInvokerFunc will end up calling.
-      var argCount = argTypes.length;
-  
-      if (argCount < 2) {
-        throwBindingError("argTypes array size mismatch! Must at least get return value and 'this' types!");
-      }
-  
-      var isClassMethodFunc = (argTypes[1] !== null && classType !== null);
-  
-      // Free functions with signature "void function()" do not need an invoker that marshalls between wire types.
-  // TODO: This omits argument count check - enable only at -O3 or similar.
-  //    if (ENABLE_UNSAFE_OPTS && argCount == 2 && argTypes[0].name == "void" && !isClassMethodFunc) {
-  //       return FUNCTION_TABLE[fn];
-  //    }
-  
-      // Determine if we need to use a dynamic stack to store the destructors for the function parameters.
-      // TODO: Remove this completely once all function invokers are being dynamically generated.
-      var needsDestructorStack = false;
-  
-      for (var i = 1; i < argTypes.length; ++i) { // Skip return value at index 0 - it's not deleted here.
-        if (argTypes[i] !== null && argTypes[i].destructorFunction === undefined) { // The type does not define a destructor function - must use dynamic stack
-          needsDestructorStack = true;
-          break;
-        }
-      }
-  
-      var returns = (argTypes[0].name !== "void");
-  
-      var argsList = "";
-      var argsListWired = "";
-      for (var i = 0; i < argCount - 2; ++i) {
-        argsList += (i!==0?", ":"")+"arg"+i;
-        argsListWired += (i!==0?", ":"")+"arg"+i+"Wired";
-      }
-  
-      var invokerFnBody =
-          "return function "+makeLegalFunctionName(humanName)+"("+argsList+") {\n" +
-          "if (arguments.length !== "+(argCount - 2)+") {\n" +
-              "throwBindingError('function "+humanName+" called with ' + arguments.length + ' arguments, expected "+(argCount - 2)+" args!');\n" +
-          "}\n";
-  
-      if (needsDestructorStack) {
-        invokerFnBody += "var destructors = [];\n";
-      }
-  
-      var dtorStack = needsDestructorStack ? "destructors" : "null";
-      var args1 = ["throwBindingError", "invoker", "fn", "runDestructors", "retType", "classParam"];
-      var args2 = [throwBindingError, cppInvokerFunc, cppTargetFunc, runDestructors, argTypes[0], argTypes[1]];
-  
-      if (isClassMethodFunc) {
-        invokerFnBody += "var thisWired = classParam.toWireType("+dtorStack+", this);\n";
-      }
-  
-      for (var i = 0; i < argCount - 2; ++i) {
-        invokerFnBody += "var arg"+i+"Wired = argType"+i+".toWireType("+dtorStack+", arg"+i+"); // "+argTypes[i+2].name+"\n";
-        args1.push("argType"+i);
-        args2.push(argTypes[i+2]);
-      }
-  
-      if (isClassMethodFunc) {
-        argsListWired = "thisWired" + (argsListWired.length > 0 ? ", " : "") + argsListWired;
-      }
-  
-      invokerFnBody +=
-          (returns?"var rv = ":"") + "invoker(fn"+(argsListWired.length>0?", ":"")+argsListWired+");\n";
-  
-      if (needsDestructorStack) {
-        invokerFnBody += "runDestructors(destructors);\n";
-      } else {
-        for (var i = isClassMethodFunc?1:2; i < argTypes.length; ++i) { // Skip return value at index 0 - it's not deleted here. Also skip class type if not a method.
-          var paramName = (i === 1 ? "thisWired" : ("arg"+(i - 2)+"Wired"));
-          if (argTypes[i].destructorFunction !== null) {
-            invokerFnBody += paramName+"_dtor("+paramName+"); // "+argTypes[i].name+"\n";
-            args1.push(paramName+"_dtor");
-            args2.push(argTypes[i].destructorFunction);
-          }
-        }
-      }
-  
-      if (returns) {
-        invokerFnBody += "var ret = retType.fromWireType(rv);\n" +
-                         "return ret;\n";
-      } else {
-      }
-  
-      invokerFnBody += "}\n";
-  
-      args1.push(invokerFnBody);
-  
-      var invokerFunction = new_(Function, args1).apply(null, args2);
-      return invokerFunction;
-    }
-  
-  function ensureOverloadTable(proto, methodName, humanName) {
-      if (undefined === proto[methodName].overloadTable) {
-        var prevFunc = proto[methodName];
-        // Inject an overload resolver function that routes to the appropriate overload based on the number of arguments.
-        proto[methodName] = function() {
-          // TODO This check can be removed in -O3 level "unsafe" optimizations.
-          if (!proto[methodName].overloadTable.hasOwnProperty(arguments.length)) {
-              throwBindingError("Function '" + humanName + "' called with an invalid number of arguments (" + arguments.length + ") - expects one of (" + proto[methodName].overloadTable + ")!");
-          }
-          return proto[methodName].overloadTable[arguments.length].apply(this, arguments);
-        };
-        // Move the previous function into the overload table.
-        proto[methodName].overloadTable = [];
-        proto[methodName].overloadTable[prevFunc.argCount] = prevFunc;
-      }
-    }
-  /** @param {number=} numArguments */
-  function exposePublicSymbol(name, value, numArguments) {
-      if (Module.hasOwnProperty(name)) {
-        if (undefined === numArguments || (undefined !== Module[name].overloadTable && undefined !== Module[name].overloadTable[numArguments])) {
-          throwBindingError("Cannot register public name '" + name + "' twice");
-        }
-  
-        // We are exposing a function with the same name as an existing function. Create an overload table and a function selector
-        // that routes between the two.
-        ensureOverloadTable(Module, name, name);
-        if (Module.hasOwnProperty(numArguments)) {
-            throwBindingError("Cannot register multiple overloads of a function with the same number of arguments (" + numArguments + ")!");
-        }
-        // Add the new function into the overload table.
-        Module[name].overloadTable[numArguments] = value;
-      }
-      else {
-        Module[name] = value;
-        if (undefined !== numArguments) {
-          Module[name].numArguments = numArguments;
-        }
-      }
-    }
-  
-  function heap32VectorToArray(count, firstElement) {
-      var array = [];
-      for (var i = 0; i < count; i++) {
-          array.push(HEAP32[(firstElement >> 2) + i]);
-      }
-      return array;
-    }
-  
-  /** @param {number=} numArguments */
-  function replacePublicSymbol(name, value, numArguments) {
-      if (!Module.hasOwnProperty(name)) {
-        throwInternalError('Replacing nonexistant public symbol');
-      }
-      // If there's an overload table for this symbol, replace the symbol in the overload table instead.
-      if (undefined !== Module[name].overloadTable && undefined !== numArguments) {
-        Module[name].overloadTable[numArguments] = value;
-      }
-      else {
-        Module[name] = value;
-        Module[name].argCount = numArguments;
-      }
-    }
-  
-  function dynCallLegacy(sig, ptr, args) {
-      assert(('dynCall_' + sig) in Module, 'bad function pointer type - no table for sig \'' + sig + '\'');
-      if (args && args.length) {
-        // j (64-bit integer) must be passed in as two numbers [low 32, high 32].
-        assert(args.length === sig.substring(1).replace(/j/g, '--').length);
-      } else {
-        assert(sig.length == 1);
-      }
-      var f = Module["dynCall_" + sig];
-      return args && args.length ? f.apply(null, [ptr].concat(args)) : f.call(null, ptr);
-    }
-  /** @param {Object=} args */
-  function dynCall(sig, ptr, args) {
-      // Without WASM_BIGINT support we cannot directly call function with i64 as
-      // part of thier signature, so we rely the dynCall functions generated by
-      // wasm-emscripten-finalize
-      if (sig.includes('j')) {
-        return dynCallLegacy(sig, ptr, args);
-      }
-      assert(getWasmTableEntry(ptr), 'missing table entry in dynCall: ' + ptr);
-      return getWasmTableEntry(ptr).apply(null, args)
-    }
-  function getDynCaller(sig, ptr) {
-      assert(sig.includes('j'), 'getDynCaller should only be called with i64 sigs')
-      var argCache = [];
-      return function() {
-        argCache.length = 0;
-        Object.assign(argCache, arguments);
-        return dynCall(sig, ptr, argCache);
-      };
-    }
-  function embind__requireFunction(signature, rawFunction) {
-      signature = readLatin1String(signature);
-  
-      function makeDynCaller() {
-        if (signature.includes('j')) {
-          return getDynCaller(signature, rawFunction);
-        }
-        return getWasmTableEntry(rawFunction);
-      }
-  
-      var fp = makeDynCaller();
-      if (typeof fp != "function") {
-          throwBindingError("unknown function pointer with signature " + signature + ": " + rawFunction);
-      }
-      return fp;
-    }
-  
-  var UnboundTypeError = undefined;
-  
-  function getTypeName(type) {
-      var ptr = ___getTypeName(type);
-      var rv = readLatin1String(ptr);
-      _free(ptr);
-      return rv;
-    }
-  function throwUnboundTypeError(message, types) {
-      var unboundTypes = [];
-      var seen = {};
-      function visit(type) {
-        if (seen[type]) {
-          return;
-        }
-        if (registeredTypes[type]) {
-          return;
-        }
-        if (typeDependencies[type]) {
-          typeDependencies[type].forEach(visit);
-          return;
-        }
-        unboundTypes.push(type);
-        seen[type] = true;
-      }
-      types.forEach(visit);
-  
-      throw new UnboundTypeError(message + ': ' + unboundTypes.map(getTypeName).join([', ']));
-    }
-  function __embind_register_function(name, argCount, rawArgTypesAddr, signature, rawInvoker, fn) {
-      var argTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
-      name = readLatin1String(name);
-  
-      rawInvoker = embind__requireFunction(signature, rawInvoker);
-  
-      exposePublicSymbol(name, function() {
-          throwUnboundTypeError('Cannot call ' + name + ' due to unbound types', argTypes);
-      }, argCount - 1);
-  
-      whenDependentTypesAreResolved([], argTypes, function(argTypes) {
-          var invokerArgsArray = [argTypes[0] /* return value */, null /* no class 'this'*/].concat(argTypes.slice(1) /* actual params */);
-          replacePublicSymbol(name, craftInvokerFunction(name, invokerArgsArray, null /* no class 'this'*/, rawInvoker, fn), argCount - 1);
-          return [];
-      });
-    }
-
-  function integerReadValueFromPointer(name, shift, signed) {
-      // integers are quite common, so generate very specialized functions
-      switch (shift) {
-          case 0: return signed ?
-              function readS8FromPointer(pointer) { return HEAP8[pointer]; } :
-              function readU8FromPointer(pointer) { return HEAPU8[pointer]; };
-          case 1: return signed ?
-              function readS16FromPointer(pointer) { return HEAP16[pointer >> 1]; } :
-              function readU16FromPointer(pointer) { return HEAPU16[pointer >> 1]; };
-          case 2: return signed ?
-              function readS32FromPointer(pointer) { return HEAP32[pointer >> 2]; } :
-              function readU32FromPointer(pointer) { return HEAPU32[pointer >> 2]; };
-          default:
-              throw new TypeError("Unknown integer type: " + name);
-      }
-    }
-  function __embind_register_integer(primitiveType, name, size, minRange, maxRange) {
-      name = readLatin1String(name);
-      if (maxRange === -1) { // LLVM doesn't have signed and unsigned 32-bit types, so u32 literals come out as 'i32 -1'. Always treat those as max u32.
-          maxRange = 4294967295;
-      }
-  
-      var shift = getShiftFromSize(size);
-  
-      var fromWireType = (value) => value;
-  
-      if (minRange === 0) {
-          var bitshift = 32 - 8*size;
-          fromWireType = (value) => (value << bitshift) >>> bitshift;
-      }
-  
-      var isUnsignedType = (name.includes('unsigned'));
-      var checkAssertions = (value, toTypeName) => {
-          if (typeof value != "number" && typeof value != "boolean") {
-              throw new TypeError('Cannot convert "' + _embind_repr(value) + '" to ' + toTypeName);
-          }
-          if (value < minRange || value > maxRange) {
-              throw new TypeError('Passing a number "' + _embind_repr(value) + '" from JS side to C/C++ side to an argument of type "' + name + '", which is outside the valid range [' + minRange + ', ' + maxRange + ']!');
-          }
-      }
-      var toWireType;
-      if (isUnsignedType) {
-          toWireType = function(destructors, value) {
-              checkAssertions(value, this.name);
-              return value >>> 0;
-          }
-      } else {
-          toWireType = function(destructors, value) {
-              checkAssertions(value, this.name);
-              // The VM will perform JS to Wasm value conversion, according to the spec:
-              // https://www.w3.org/TR/wasm-js-api-1/#towebassemblyvalue
-              return value;
-          }
-      }
-      registerType(primitiveType, {
-          name: name,
-          'fromWireType': fromWireType,
-          'toWireType': toWireType,
-          'argPackAdvance': 8,
-          'readValueFromPointer': integerReadValueFromPointer(name, shift, minRange !== 0),
-          destructorFunction: null, // This type does not need a destructor
-      });
-    }
-
-  function __embind_register_memory_view(rawType, dataTypeIndex, name) {
-      var typeMapping = [
-        Int8Array,
-        Uint8Array,
-        Int16Array,
-        Uint16Array,
-        Int32Array,
-        Uint32Array,
-        Float32Array,
-        Float64Array,
-      ];
-  
-      var TA = typeMapping[dataTypeIndex];
-  
-      function decodeMemoryView(handle) {
-        handle = handle >> 2;
-        var heap = HEAPU32;
-        var size = heap[handle]; // in elements
-        var data = heap[handle + 1]; // byte offset into emscripten heap
-        return new TA(buffer, data, size);
-      }
-  
-      name = readLatin1String(name);
-      registerType(rawType, {
-        name: name,
-        'fromWireType': decodeMemoryView,
-        'argPackAdvance': 8,
-        'readValueFromPointer': decodeMemoryView,
-      }, {
-        ignoreDuplicateRegistrations: true,
-      });
-    }
-
-  function __embind_register_std_string(rawType, name) {
-      name = readLatin1String(name);
-      var stdStringIsUTF8
-      //process only std::string bindings with UTF8 support, in contrast to e.g. std::basic_string<unsigned char>
-      = (name === "std::string");
-  
-      registerType(rawType, {
-          name: name,
-          'fromWireType': function(value) {
-              var length = HEAPU32[value >> 2];
-  
-              var str;
-              if (stdStringIsUTF8) {
-                  var decodeStartPtr = value + 4;
-                  // Looping here to support possible embedded '0' bytes
-                  for (var i = 0; i <= length; ++i) {
-                      var currentBytePtr = value + 4 + i;
-                      if (i == length || HEAPU8[currentBytePtr] == 0) {
-                          var maxRead = currentBytePtr - decodeStartPtr;
-                          var stringSegment = UTF8ToString(decodeStartPtr, maxRead);
-                          if (str === undefined) {
-                              str = stringSegment;
-                          } else {
-                              str += String.fromCharCode(0);
-                              str += stringSegment;
-                          }
-                          decodeStartPtr = currentBytePtr + 1;
-                      }
-                  }
-              } else {
-                  var a = new Array(length);
-                  for (var i = 0; i < length; ++i) {
-                      a[i] = String.fromCharCode(HEAPU8[value + 4 + i]);
-                  }
-                  str = a.join('');
-              }
-  
-              _free(value);
-  
-              return str;
-          },
-          'toWireType': function(destructors, value) {
-              if (value instanceof ArrayBuffer) {
-                  value = new Uint8Array(value);
-              }
-  
-              var getLength;
-              var valueIsOfTypeString = (typeof value == 'string');
-  
-              if (!(valueIsOfTypeString || value instanceof Uint8Array || value instanceof Uint8ClampedArray || value instanceof Int8Array)) {
-                  throwBindingError('Cannot pass non-string to std::string');
-              }
-              if (stdStringIsUTF8 && valueIsOfTypeString) {
-                  getLength = () => lengthBytesUTF8(value);
-              } else {
-                  getLength = () => value.length;
-              }
-  
-              // assumes 4-byte alignment
-              var length = getLength();
-              var ptr = _malloc(4 + length + 1);
-              HEAPU32[ptr >> 2] = length;
-              if (stdStringIsUTF8 && valueIsOfTypeString) {
-                  stringToUTF8(value, ptr + 4, length + 1);
-              } else {
-                  if (valueIsOfTypeString) {
-                      for (var i = 0; i < length; ++i) {
-                          var charCode = value.charCodeAt(i);
-                          if (charCode > 255) {
-                              _free(ptr);
-                              throwBindingError('String has UTF-16 code units that do not fit in 8 bits');
-                          }
-                          HEAPU8[ptr + 4 + i] = charCode;
-                      }
-                  } else {
-                      for (var i = 0; i < length; ++i) {
-                          HEAPU8[ptr + 4 + i] = value[i];
-                      }
-                  }
-              }
-  
-              if (destructors !== null) {
-                  destructors.push(_free, ptr);
-              }
-              return ptr;
-          },
-          'argPackAdvance': 8,
-          'readValueFromPointer': simpleReadValueFromPointer,
-          destructorFunction: function(ptr) { _free(ptr); },
-      });
-    }
-
-  function __embind_register_std_wstring(rawType, charSize, name) {
-      name = readLatin1String(name);
-      var decodeString, encodeString, getHeap, lengthBytesUTF, shift;
-      if (charSize === 2) {
-        decodeString = UTF16ToString;
-        encodeString = stringToUTF16;
-        lengthBytesUTF = lengthBytesUTF16;
-        getHeap = () => HEAPU16;
-        shift = 1;
-      } else if (charSize === 4) {
-        decodeString = UTF32ToString;
-        encodeString = stringToUTF32;
-        lengthBytesUTF = lengthBytesUTF32;
-        getHeap = () => HEAPU32;
-        shift = 2;
-      }
-      registerType(rawType, {
-        name: name,
-        'fromWireType': function(value) {
-          // Code mostly taken from _embind_register_std_string fromWireType
-          var length = HEAPU32[value >> 2];
-          var HEAP = getHeap();
-          var str;
-  
-          var decodeStartPtr = value + 4;
-          // Looping here to support possible embedded '0' bytes
-          for (var i = 0; i <= length; ++i) {
-            var currentBytePtr = value + 4 + i * charSize;
-            if (i == length || HEAP[currentBytePtr >> shift] == 0) {
-              var maxReadBytes = currentBytePtr - decodeStartPtr;
-              var stringSegment = decodeString(decodeStartPtr, maxReadBytes);
-              if (str === undefined) {
-                str = stringSegment;
-              } else {
-                str += String.fromCharCode(0);
-                str += stringSegment;
-              }
-              decodeStartPtr = currentBytePtr + charSize;
-            }
-          }
-  
-          _free(value);
-  
-          return str;
-        },
-        'toWireType': function(destructors, value) {
-          if (!(typeof value == 'string')) {
-            throwBindingError('Cannot pass non-string to C++ string type ' + name);
-          }
-  
-          // assumes 4-byte alignment
-          var length = lengthBytesUTF(value);
-          var ptr = _malloc(4 + length + charSize);
-          HEAPU32[ptr >> 2] = length >> shift;
-  
-          encodeString(value, ptr + 4, length + charSize);
-  
-          if (destructors !== null) {
-            destructors.push(_free, ptr);
-          }
-          return ptr;
-        },
-        'argPackAdvance': 8,
-        'readValueFromPointer': simpleReadValueFromPointer,
-        destructorFunction: function(ptr) { _free(ptr); },
-      });
-    }
-
-  function __embind_register_void(rawType, name) {
-      name = readLatin1String(name);
-      registerType(rawType, {
-          isVoid: true, // void return values can be optimized out sometimes
-          name: name,
-          'argPackAdvance': 0,
-          'fromWireType': function() {
-              return undefined;
-          },
-          'toWireType': function(destructors, o) {
-              // TODO: assert if anything else is given?
-              return undefined;
-          },
-      });
-    }
-
-  function requireRegisteredType(rawType, humanName) {
-      var impl = registeredTypes[rawType];
-      if (undefined === impl) {
-          throwBindingError(humanName + " has unknown type " + getTypeName(rawType));
-      }
-      return impl;
-    }
-  function __emval_as(handle, returnType, destructorsRef) {
-      handle = Emval.toValue(handle);
-      returnType = requireRegisteredType(returnType, 'emval::as');
-      var destructors = [];
-      var rd = Emval.toHandle(destructors);
-      HEAP32[destructorsRef >> 2] = rd;
-      return returnType['toWireType'](destructors, handle);
-    }
-
-  function __emval_allocateDestructors(destructorsRef) {
-      var destructors = [];
-      HEAP32[destructorsRef >> 2] = Emval.toHandle(destructors);
-      return destructors;
-    }
-  
-  var emval_symbols = {};
-  function getStringOrSymbol(address) {
-      var symbol = emval_symbols[address];
-      if (symbol === undefined) {
-        return readLatin1String(address);
-      }
-      return symbol;
-    }
-  
-  var emval_methodCallers = [];
-  function __emval_call_method(caller, handle, methodName, destructorsRef, args) {
-      caller = emval_methodCallers[caller];
-      handle = Emval.toValue(handle);
-      methodName = getStringOrSymbol(methodName);
-      return caller(handle, methodName, __emval_allocateDestructors(destructorsRef), args);
-    }
-
-  function __emval_call_void_method(caller, handle, methodName, args) {
-      caller = emval_methodCallers[caller];
-      handle = Emval.toValue(handle);
-      methodName = getStringOrSymbol(methodName);
-      caller(handle, methodName, null, args);
-    }
-
-
-  function emval_get_global() {
-      if (typeof globalThis == 'object') {
-        return globalThis;
-      }
-      return (function(){
-        return Function;
-      })()('return this')();
-    }
-  function __emval_get_global(name) {
-      if (name===0) {
-        return Emval.toHandle(emval_get_global());
-      } else {
-        name = getStringOrSymbol(name);
-        return Emval.toHandle(emval_get_global()[name]);
-      }
-    }
-
-  function __emval_addMethodCaller(caller) {
-      var id = emval_methodCallers.length;
-      emval_methodCallers.push(caller);
-      return id;
-    }
-  
-  function __emval_lookupTypes(argCount, argTypes) {
-      var a = new Array(argCount);
-      for (var i = 0; i < argCount; ++i) {
-        a[i] = requireRegisteredType(HEAP32[(argTypes >> 2) + i],
-                                     "parameter " + i);
-      }
-      return a;
-    }
-  
-  var emval_registeredMethods = [];
-  function __emval_get_method_caller(argCount, argTypes) {
-      var types = __emval_lookupTypes(argCount, argTypes);
-      var retType = types[0];
-      var signatureName = retType.name + "_$" + types.slice(1).map(function (t) { return t.name; }).join("_") + "$";
-      var returnId = emval_registeredMethods[signatureName];
-      if (returnId !== undefined) {
-        return returnId;
-      }
-  
-      var params = ["retType"];
-      var args = [retType];
-  
-      var argsList = ""; // 'arg0, arg1, arg2, ... , argN'
-      for (var i = 0; i < argCount - 1; ++i) {
-        argsList += (i !== 0 ? ", " : "") + "arg" + i;
-        params.push("argType" + i);
-        args.push(types[1 + i]);
-      }
-  
-      var functionName = makeLegalFunctionName("methodCaller_" + signatureName);
-      var functionBody =
-          "return function " + functionName + "(handle, name, destructors, args) {\n";
-  
-      var offset = 0;
-      for (var i = 0; i < argCount - 1; ++i) {
-          functionBody +=
-          "    var arg" + i + " = argType" + i + ".readValueFromPointer(args" + (offset ? ("+"+offset) : "") + ");\n";
-          offset += types[i + 1]['argPackAdvance'];
-      }
-      functionBody +=
-          "    var rv = handle[name](" + argsList + ");\n";
-      for (var i = 0; i < argCount - 1; ++i) {
-          if (types[i + 1]['deleteObject']) {
-              functionBody +=
-              "    argType" + i + ".deleteObject(arg" + i + ");\n";
-          }
-      }
-      if (!retType.isVoid) {
-          functionBody +=
-          "    return retType.toWireType(destructors, rv);\n";
-      }
-      functionBody +=
-          "};\n";
-  
-      params.push(functionBody);
-      var invokerFunction = new_(Function, params).apply(null, args);
-      returnId = __emval_addMethodCaller(invokerFunction);
-      emval_registeredMethods[signatureName] = returnId;
-      return returnId;
-    }
-
-  function __emval_get_module_property(name) {
-      name = getStringOrSymbol(name);
-      return Emval.toHandle(Module[name]);
-    }
-
-  function __emval_get_property(handle, key) {
-      handle = Emval.toValue(handle);
-      key = Emval.toValue(key);
-      return Emval.toHandle(handle[key]);
-    }
-
-  function __emval_incref(handle) {
-      if (handle > 4) {
-        emval_handle_array[handle].refcount += 1;
-      }
-    }
-
-  function craftEmvalAllocator(argCount) {
-      /*This function returns a new function that looks like this:
-      function emval_allocator_3(constructor, argTypes, args) {
-          var argType0 = requireRegisteredType(HEAP32[(argTypes >> 2)], "parameter 0");
-          var arg0 = argType0['readValueFromPointer'](args);
-          var argType1 = requireRegisteredType(HEAP32[(argTypes >> 2) + 1], "parameter 1");
-          var arg1 = argType1['readValueFromPointer'](args + 8);
-          var argType2 = requireRegisteredType(HEAP32[(argTypes >> 2) + 2], "parameter 2");
-          var arg2 = argType2['readValueFromPointer'](args + 16);
-          var obj = new constructor(arg0, arg1, arg2);
-          return Emval.toHandle(obj);
-      } */
-      var argsList = "";
-      for (var i = 0; i < argCount; ++i) {
-        argsList += (i!==0?", ":"")+"arg"+i; // 'arg0, arg1, ..., argn'
-      }
-  
-      var functionBody =
-          "return function emval_allocator_"+argCount+"(constructor, argTypes, args) {\n";
-  
-      for (var i = 0; i < argCount; ++i) {
-          functionBody +=
-              "var argType"+i+" = requireRegisteredType(Module['HEAP32'][(argTypes >>> 2) + "+i+"], \"parameter "+i+"\");\n" +
-              "var arg"+i+" = argType"+i+".readValueFromPointer(args);\n" +
-              "args += argType"+i+"['argPackAdvance'];\n";
-      }
-      functionBody +=
-          "var obj = new constructor("+argsList+");\n" +
-          "return valueToHandle(obj);\n" +
-          "}\n";
-  
-      /*jshint evil:true*/
-      return (new Function("requireRegisteredType", "Module", "valueToHandle", functionBody))(
-          requireRegisteredType, Module, Emval.toHandle);
-    }
-  
-  var emval_newers = {};
-  function __emval_new(handle, argCount, argTypes, args) {
-      handle = Emval.toValue(handle);
-  
-      var newer = emval_newers[argCount];
-      if (!newer) {
-        newer = craftEmvalAllocator(argCount);
-        emval_newers[argCount] = newer;
-      }
-  
-      return newer(handle, argTypes, args);
-    }
-
-  function __emval_new_cstring(v) {
-      return Emval.toHandle(getStringOrSymbol(v));
-    }
-
-  function __emval_run_destructors(handle) {
-      var destructors = Emval.toValue(handle);
-      runDestructors(destructors);
-      __emval_decref(handle);
-    }
-
-  function __emval_set_property(handle, key, value) {
-      handle = Emval.toValue(handle);
-      key = Emval.toValue(key);
-      value = Emval.toValue(value);
-      handle[key] = value;
-    }
-
-  function __emval_take_value(type, argv) {
-      type = requireRegisteredType(type, '_emval_take_value');
-      var v = type['readValueFromPointer'](argv);
-      return Emval.toHandle(v);
-    }
-
-  function __emval_typeof(handle) {
-      handle = Emval.toValue(handle);
-      return Emval.toHandle(typeof handle);
-    }
-
-  function _abort() {
-      abort('native code called abort()');
-    }
-
-  function _emscripten_memcpy_big(dest, src, num) {
-      HEAPU8.copyWithin(dest, src, src + num);
-    }
-
-  function getHeapMax() {
-      return HEAPU8.length;
-    }
-  
-  function abortOnCannotGrowMemory(requestedSize) {
-      abort('Cannot enlarge memory arrays to size ' + requestedSize + ' bytes (OOM). Either (1) compile with -sINITIAL_MEMORY=X with X higher than the current value ' + HEAP8.length + ', (2) compile with -sALLOW_MEMORY_GROWTH which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with -sABORTING_MALLOC=0');
-    }
-  function _emscripten_resize_heap(requestedSize) {
-      var oldSize = HEAPU8.length;
-      requestedSize = requestedSize >>> 0;
-      abortOnCannotGrowMemory(requestedSize);
-    }
-
-  /** @param {boolean=} synchronous */
-  function callUserCallback(func, synchronous) {
-      if (ABORT) {
-        err('user callback triggered after runtime exited or application aborted.  Ignoring.');
-        return;
-      }
-      // For synchronous calls, let any exceptions propagate, and don't let the runtime exit.
-      if (synchronous) {
-        func();
-        return;
-      }
-      try {
-        func();
-      } catch (e) {
-        handleException(e);
-      }
-    }
-  
-  function runtimeKeepalivePush() {
-    }
-  
-  function runtimeKeepalivePop() {
-    }
-  /** @param {number=} timeout */
-  function safeSetTimeout(func, timeout) {
-      
-      return setTimeout(function() {
-        
-        callUserCallback(func);
-      }, timeout);
-    }
-  var Browser = {mainLoop:{running:false,scheduler:null,method:"",currentlyRunningMainloop:0,func:null,arg:0,timingMode:0,timingValue:0,currentFrameNumber:0,queue:[],pause:function() {
-          Browser.mainLoop.scheduler = null;
-          // Incrementing this signals the previous main loop that it's now become old, and it must return.
-          Browser.mainLoop.currentlyRunningMainloop++;
-        },resume:function() {
-          Browser.mainLoop.currentlyRunningMainloop++;
-          var timingMode = Browser.mainLoop.timingMode;
-          var timingValue = Browser.mainLoop.timingValue;
-          var func = Browser.mainLoop.func;
-          Browser.mainLoop.func = null;
-          // do not set timing and call scheduler, we will do it on the next lines
-          setMainLoop(func, 0, false, Browser.mainLoop.arg, true);
-          _emscripten_set_main_loop_timing(timingMode, timingValue);
-          Browser.mainLoop.scheduler();
-        },updateStatus:function() {
-          if (Module['setStatus']) {
-            var message = Module['statusMessage'] || 'Please wait...';
-            var remaining = Browser.mainLoop.remainingBlockers;
-            var expected = Browser.mainLoop.expectedBlockers;
-            if (remaining) {
-              if (remaining < expected) {
-                Module['setStatus'](message + ' (' + (expected - remaining) + '/' + expected + ')');
-              } else {
-                Module['setStatus'](message);
-              }
-            } else {
-              Module['setStatus']('');
-            }
-          }
-        },runIter:function(func) {
-          if (ABORT) return;
-          if (Module['preMainLoop']) {
-            var preRet = Module['preMainLoop']();
-            if (preRet === false) {
-              return; // |return false| skips a frame
-            }
-          }
-          callUserCallback(func);
-          if (Module['postMainLoop']) Module['postMainLoop']();
-        }},isFullscreen:false,pointerLock:false,moduleContextCreatedCallbacks:[],workers:[],init:function() {
-        if (!Module["preloadPlugins"]) Module["preloadPlugins"] = []; // needs to exist even in workers
-  
-        if (Browser.initted) return;
-        Browser.initted = true;
-  
-        try {
-          new Blob();
-          Browser.hasBlobConstructor = true;
-        } catch(e) {
-          Browser.hasBlobConstructor = false;
-          out("warning: no blob constructor, cannot create blobs with mimetypes");
-        }
-        Browser.BlobBuilder = typeof MozBlobBuilder != "undefined" ? MozBlobBuilder : (typeof WebKitBlobBuilder != "undefined" ? WebKitBlobBuilder : (!Browser.hasBlobConstructor ? out("warning: no BlobBuilder") : null));
-        Browser.URLObject = typeof window != "undefined" ? (window.URL ? window.URL : window.webkitURL) : undefined;
-        if (!Module.noImageDecoding && typeof Browser.URLObject == 'undefined') {
-          out("warning: Browser does not support creating object URLs. Built-in browser image decoding will not be available.");
-          Module.noImageDecoding = true;
-        }
-  
-        // Support for plugins that can process preloaded files. You can add more of these to
-        // your app by creating and appending to Module.preloadPlugins.
-        //
-        // Each plugin is asked if it can handle a file based on the file's name. If it can,
-        // it is given the file's raw data. When it is done, it calls a callback with the file's
-        // (possibly modified) data. For example, a plugin might decompress a file, or it
-        // might create some side data structure for use later (like an Image element, etc.).
-  
-        var imagePlugin = {};
-        imagePlugin['canHandle'] = function imagePlugin_canHandle(name) {
-          return !Module.noImageDecoding && /\.(jpg|jpeg|png|bmp)$/i.test(name);
-        };
-        imagePlugin['handle'] = function imagePlugin_handle(byteArray, name, onload, onerror) {
-          var b = null;
-          if (Browser.hasBlobConstructor) {
-            try {
-              b = new Blob([byteArray], { type: Browser.getMimetype(name) });
-              if (b.size !== byteArray.length) { // Safari bug #118630
-                // Safari's Blob can only take an ArrayBuffer
-                b = new Blob([(new Uint8Array(byteArray)).buffer], { type: Browser.getMimetype(name) });
-              }
-            } catch(e) {
-              warnOnce('Blob constructor present but fails: ' + e + '; falling back to blob builder');
-            }
-          }
-          if (!b) {
-            var bb = new Browser.BlobBuilder();
-            bb.append((new Uint8Array(byteArray)).buffer); // we need to pass a buffer, and must copy the array to get the right data range
-            b = bb.getBlob();
-          }
-          var url = Browser.URLObject.createObjectURL(b);
-          assert(typeof url == 'string', 'createObjectURL must return a url as a string');
-          var img = new Image();
-          img.onload = () => {
-            assert(img.complete, 'Image ' + name + ' could not be decoded');
-            var canvas = /** @type {!HTMLCanvasElement} */ (document.createElement('canvas'));
-            canvas.width = img.width;
-            canvas.height = img.height;
-            var ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0);
-            preloadedImages[name] = canvas;
-            Browser.URLObject.revokeObjectURL(url);
-            if (onload) onload(byteArray);
-          };
-          img.onerror = (event) => {
-            out('Image ' + url + ' could not be decoded');
-            if (onerror) onerror();
-          };
-          img.src = url;
-        };
-        Module['preloadPlugins'].push(imagePlugin);
-  
-        var audioPlugin = {};
-        audioPlugin['canHandle'] = function audioPlugin_canHandle(name) {
-          return !Module.noAudioDecoding && name.substr(-4) in { '.ogg': 1, '.wav': 1, '.mp3': 1 };
-        };
-        audioPlugin['handle'] = function audioPlugin_handle(byteArray, name, onload, onerror) {
-          var done = false;
-          function finish(audio) {
-            if (done) return;
-            done = true;
-            preloadedAudios[name] = audio;
-            if (onload) onload(byteArray);
-          }
-          function fail() {
-            if (done) return;
-            done = true;
-            preloadedAudios[name] = new Audio(); // empty shim
-            if (onerror) onerror();
-          }
-          if (Browser.hasBlobConstructor) {
-            try {
-              var b = new Blob([byteArray], { type: Browser.getMimetype(name) });
-            } catch(e) {
-              return fail();
-            }
-            var url = Browser.URLObject.createObjectURL(b); // XXX we never revoke this!
-            assert(typeof url == 'string', 'createObjectURL must return a url as a string');
-            var audio = new Audio();
-            audio.addEventListener('canplaythrough', function() { finish(audio) }, false); // use addEventListener due to chromium bug 124926
-            audio.onerror = function audio_onerror(event) {
-              if (done) return;
-              out('warning: browser could not fully decode audio ' + name + ', trying slower base64 approach');
-              function encode64(data) {
-                var BASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-                var PAD = '=';
-                var ret = '';
-                var leftchar = 0;
-                var leftbits = 0;
-                for (var i = 0; i < data.length; i++) {
-                  leftchar = (leftchar << 8) | data[i];
-                  leftbits += 8;
-                  while (leftbits >= 6) {
-                    var curr = (leftchar >> (leftbits-6)) & 0x3f;
-                    leftbits -= 6;
-                    ret += BASE[curr];
-                  }
-                }
-                if (leftbits == 2) {
-                  ret += BASE[(leftchar&3) << 4];
-                  ret += PAD + PAD;
-                } else if (leftbits == 4) {
-                  ret += BASE[(leftchar&0xf) << 2];
-                  ret += PAD;
-                }
-                return ret;
-              }
-              audio.src = 'data:audio/x-' + name.substr(-3) + ';base64,' + encode64(byteArray);
-              finish(audio); // we don't wait for confirmation this worked - but it's worth trying
-            };
-            audio.src = url;
-            // workaround for chrome bug 124926 - we do not always get oncanplaythrough or onerror
-            safeSetTimeout(function() {
-              finish(audio); // try to use it even though it is not necessarily ready to play
-            }, 10000);
-          } else {
-            return fail();
-          }
-        };
-        Module['preloadPlugins'].push(audioPlugin);
-  
-        // Canvas event setup
-  
-        function pointerLockChange() {
-          Browser.pointerLock = document['pointerLockElement'] === Module['canvas'] ||
-                                document['mozPointerLockElement'] === Module['canvas'] ||
-                                document['webkitPointerLockElement'] === Module['canvas'] ||
-                                document['msPointerLockElement'] === Module['canvas'];
-        }
-        var canvas = Module['canvas'];
-        if (canvas) {
-          // forced aspect ratio can be enabled by defining 'forcedAspectRatio' on Module
-          // Module['forcedAspectRatio'] = 4 / 3;
-  
-          canvas.requestPointerLock = canvas['requestPointerLock'] ||
-                                      canvas['mozRequestPointerLock'] ||
-                                      canvas['webkitRequestPointerLock'] ||
-                                      canvas['msRequestPointerLock'] ||
-                                      function(){};
-          canvas.exitPointerLock = document['exitPointerLock'] ||
-                                   document['mozExitPointerLock'] ||
-                                   document['webkitExitPointerLock'] ||
-                                   document['msExitPointerLock'] ||
-                                   function(){}; // no-op if function does not exist
-          canvas.exitPointerLock = canvas.exitPointerLock.bind(document);
-  
-          document.addEventListener('pointerlockchange', pointerLockChange, false);
-          document.addEventListener('mozpointerlockchange', pointerLockChange, false);
-          document.addEventListener('webkitpointerlockchange', pointerLockChange, false);
-          document.addEventListener('mspointerlockchange', pointerLockChange, false);
-  
-          if (Module['elementPointerLock']) {
-            canvas.addEventListener("click", function(ev) {
-              if (!Browser.pointerLock && Module['canvas'].requestPointerLock) {
-                Module['canvas'].requestPointerLock();
-                ev.preventDefault();
-              }
-            }, false);
-          }
-        }
-      },handledByPreloadPlugin:function(byteArray, fullname, finish, onerror) {
-        // Ensure plugins are ready.
-        Browser.init();
-  
-        var handled = false;
-        Module['preloadPlugins'].forEach(function(plugin) {
-          if (handled) return;
-          if (plugin['canHandle'](fullname)) {
-            plugin['handle'](byteArray, fullname, finish, onerror);
-            handled = true;
-          }
-        });
-        return handled;
-      },createContext:function(/** @type {HTMLCanvasElement} */ canvas, useWebGL, setInModule, webGLContextAttributes) {
-        if (useWebGL && Module.ctx && canvas == Module.canvas) return Module.ctx; // no need to recreate GL context if it's already been created for this canvas.
-  
-        var ctx;
-        var contextHandle;
-        if (useWebGL) {
-          // For GLES2/desktop GL compatibility, adjust a few defaults to be different to WebGL defaults, so that they align better with the desktop defaults.
-          var contextAttributes = {
-            antialias: false,
-            alpha: false,
-            majorVersion: 1,
-          };
-  
-          if (webGLContextAttributes) {
-            for (var attribute in webGLContextAttributes) {
-              contextAttributes[attribute] = webGLContextAttributes[attribute];
-            }
-          }
-  
-          // This check of existence of GL is here to satisfy Closure compiler, which yells if variable GL is referenced below but GL object is not
-          // actually compiled in because application is not doing any GL operations. TODO: Ideally if GL is not being used, this function
-          // Browser.createContext() should not even be emitted.
-          if (typeof GL != 'undefined') {
-            contextHandle = GL.createContext(canvas, contextAttributes);
-            if (contextHandle) {
-              ctx = GL.getContext(contextHandle).GLctx;
-            }
-          }
-        } else {
-          ctx = canvas.getContext('2d');
-        }
-  
-        if (!ctx) return null;
-  
-        if (setInModule) {
-          if (!useWebGL) assert(typeof GLctx == 'undefined', 'cannot set in module if GLctx is used, but we are a non-GL context that would replace it');
-  
-          Module.ctx = ctx;
-          if (useWebGL) GL.makeContextCurrent(contextHandle);
-          Module.useWebGL = useWebGL;
-          Browser.moduleContextCreatedCallbacks.forEach(function(callback) { callback() });
-          Browser.init();
-        }
-        return ctx;
-      },destroyContext:function(canvas, useWebGL, setInModule) {},fullscreenHandlersInstalled:false,lockPointer:undefined,resizeCanvas:undefined,requestFullscreen:function(lockPointer, resizeCanvas) {
-        Browser.lockPointer = lockPointer;
-        Browser.resizeCanvas = resizeCanvas;
-        if (typeof Browser.lockPointer == 'undefined') Browser.lockPointer = true;
-        if (typeof Browser.resizeCanvas == 'undefined') Browser.resizeCanvas = false;
-  
-        var canvas = Module['canvas'];
-        function fullscreenChange() {
-          Browser.isFullscreen = false;
-          var canvasContainer = canvas.parentNode;
-          if ((document['fullscreenElement'] || document['mozFullScreenElement'] ||
-               document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
-               document['webkitCurrentFullScreenElement']) === canvasContainer) {
-            canvas.exitFullscreen = Browser.exitFullscreen;
-            if (Browser.lockPointer) canvas.requestPointerLock();
-            Browser.isFullscreen = true;
-            if (Browser.resizeCanvas) {
-              Browser.setFullscreenCanvasSize();
-            } else {
-              Browser.updateCanvasDimensions(canvas);
-            }
-          } else {
-            // remove the full screen specific parent of the canvas again to restore the HTML structure from before going full screen
-            canvasContainer.parentNode.insertBefore(canvas, canvasContainer);
-            canvasContainer.parentNode.removeChild(canvasContainer);
-  
-            if (Browser.resizeCanvas) {
-              Browser.setWindowedCanvasSize();
-            } else {
-              Browser.updateCanvasDimensions(canvas);
-            }
-          }
-          if (Module['onFullScreen']) Module['onFullScreen'](Browser.isFullscreen);
-          if (Module['onFullscreen']) Module['onFullscreen'](Browser.isFullscreen);
-        }
-  
-        if (!Browser.fullscreenHandlersInstalled) {
-          Browser.fullscreenHandlersInstalled = true;
-          document.addEventListener('fullscreenchange', fullscreenChange, false);
-          document.addEventListener('mozfullscreenchange', fullscreenChange, false);
-          document.addEventListener('webkitfullscreenchange', fullscreenChange, false);
-          document.addEventListener('MSFullscreenChange', fullscreenChange, false);
-        }
-  
-        // create a new parent to ensure the canvas has no siblings. this allows browsers to optimize full screen performance when its parent is the full screen root
-        var canvasContainer = document.createElement("div");
-        canvas.parentNode.insertBefore(canvasContainer, canvas);
-        canvasContainer.appendChild(canvas);
-  
-        // use parent of canvas as full screen root to allow aspect ratio correction (Firefox stretches the root to screen size)
-        canvasContainer.requestFullscreen = canvasContainer['requestFullscreen'] ||
-                                            canvasContainer['mozRequestFullScreen'] ||
-                                            canvasContainer['msRequestFullscreen'] ||
-                                           (canvasContainer['webkitRequestFullscreen'] ? function() { canvasContainer['webkitRequestFullscreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null) ||
-                                           (canvasContainer['webkitRequestFullScreen'] ? function() { canvasContainer['webkitRequestFullScreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null);
-  
-        canvasContainer.requestFullscreen();
-      },requestFullScreen:function() {
-        abort('Module.requestFullScreen has been replaced by Module.requestFullscreen (without a capital S)');
-      },exitFullscreen:function() {
-        // This is workaround for chrome. Trying to exit from fullscreen
-        // not in fullscreen state will cause "TypeError: Document not active"
-        // in chrome. See https://github.com/emscripten-core/emscripten/pull/8236
-        if (!Browser.isFullscreen) {
-          return false;
-        }
-  
-        var CFS = document['exitFullscreen'] ||
-                  document['cancelFullScreen'] ||
-                  document['mozCancelFullScreen'] ||
-                  document['msExitFullscreen'] ||
-                  document['webkitCancelFullScreen'] ||
-            (function() {});
-        CFS.apply(document, []);
-        return true;
-      },nextRAF:0,fakeRequestAnimationFrame:function(func) {
-        // try to keep 60fps between calls to here
-        var now = Date.now();
-        if (Browser.nextRAF === 0) {
-          Browser.nextRAF = now + 1000/60;
-        } else {
-          while (now + 2 >= Browser.nextRAF) { // fudge a little, to avoid timer jitter causing us to do lots of delay:0
-            Browser.nextRAF += 1000/60;
-          }
-        }
-        var delay = Math.max(Browser.nextRAF - now, 0);
-        setTimeout(func, delay);
-      },requestAnimationFrame:function(func) {
-        if (typeof requestAnimationFrame == 'function') {
-          requestAnimationFrame(func);
-          return;
-        }
-        var RAF = Browser.fakeRequestAnimationFrame;
-        RAF(func);
-      },safeSetTimeout:function(func) {
-        // Legacy function, this is used by the SDL2 port so we need to keep it
-        // around at least until that is updated.
-        return safeSetTimeout(func);
-      },safeRequestAnimationFrame:function(func) {
-        
-        return Browser.requestAnimationFrame(function() {
-          
-          callUserCallback(func);
-        });
-      },getMimetype:function(name) {
-        return {
-          'jpg': 'image/jpeg',
-          'jpeg': 'image/jpeg',
-          'png': 'image/png',
-          'bmp': 'image/bmp',
-          'ogg': 'audio/ogg',
-          'wav': 'audio/wav',
-          'mp3': 'audio/mpeg'
-        }[name.substr(name.lastIndexOf('.')+1)];
-      },getUserMedia:function(func) {
-        if (!window.getUserMedia) {
-          window.getUserMedia = navigator['getUserMedia'] ||
-                                navigator['mozGetUserMedia'];
-        }
-        window.getUserMedia(func);
-      },getMovementX:function(event) {
-        return event['movementX'] ||
-               event['mozMovementX'] ||
-               event['webkitMovementX'] ||
-               0;
-      },getMovementY:function(event) {
-        return event['movementY'] ||
-               event['mozMovementY'] ||
-               event['webkitMovementY'] ||
-               0;
-      },getMouseWheelDelta:function(event) {
-        var delta = 0;
-        switch (event.type) {
-          case 'DOMMouseScroll':
-            // 3 lines make up a step
-            delta = event.detail / 3;
-            break;
-          case 'mousewheel':
-            // 120 units make up a step
-            delta = event.wheelDelta / 120;
-            break;
-          case 'wheel':
-            delta = event.deltaY
-            switch (event.deltaMode) {
-              case 0:
-                // DOM_DELTA_PIXEL: 100 pixels make up a step
-                delta /= 100;
-                break;
-              case 1:
-                // DOM_DELTA_LINE: 3 lines make up a step
-                delta /= 3;
-                break;
-              case 2:
-                // DOM_DELTA_PAGE: A page makes up 80 steps
-                delta *= 80;
-                break;
-              default:
-                throw 'unrecognized mouse wheel delta mode: ' + event.deltaMode;
-            }
-            break;
-          default:
-            throw 'unrecognized mouse wheel event: ' + event.type;
-        }
-        return delta;
-      },mouseX:0,mouseY:0,mouseMovementX:0,mouseMovementY:0,touches:{},lastTouches:{},calculateMouseEvent:function(event) { // event should be mousemove, mousedown or mouseup
-        if (Browser.pointerLock) {
-          // When the pointer is locked, calculate the coordinates
-          // based on the movement of the mouse.
-          // Workaround for Firefox bug 764498
-          if (event.type != 'mousemove' &&
-              ('mozMovementX' in event)) {
-            Browser.mouseMovementX = Browser.mouseMovementY = 0;
-          } else {
-            Browser.mouseMovementX = Browser.getMovementX(event);
-            Browser.mouseMovementY = Browser.getMovementY(event);
-          }
-  
-          // check if SDL is available
-          if (typeof SDL != "undefined") {
-            Browser.mouseX = SDL.mouseX + Browser.mouseMovementX;
-            Browser.mouseY = SDL.mouseY + Browser.mouseMovementY;
-          } else {
-            // just add the mouse delta to the current absolut mouse position
-            // FIXME: ideally this should be clamped against the canvas size and zero
-            Browser.mouseX += Browser.mouseMovementX;
-            Browser.mouseY += Browser.mouseMovementY;
-          }
-        } else {
-          // Otherwise, calculate the movement based on the changes
-          // in the coordinates.
-          var rect = Module["canvas"].getBoundingClientRect();
-          var cw = Module["canvas"].width;
-          var ch = Module["canvas"].height;
-  
-          // Neither .scrollX or .pageXOffset are defined in a spec, but
-          // we prefer .scrollX because it is currently in a spec draft.
-          // (see: http://www.w3.org/TR/2013/WD-cssom-view-20131217/)
-          var scrollX = ((typeof window.scrollX != 'undefined') ? window.scrollX : window.pageXOffset);
-          var scrollY = ((typeof window.scrollY != 'undefined') ? window.scrollY : window.pageYOffset);
-          // If this assert lands, it's likely because the browser doesn't support scrollX or pageXOffset
-          // and we have no viable fallback.
-          assert((typeof scrollX != 'undefined') && (typeof scrollY != 'undefined'), 'Unable to retrieve scroll position, mouse positions likely broken.');
-  
-          if (event.type === 'touchstart' || event.type === 'touchend' || event.type === 'touchmove') {
-            var touch = event.touch;
-            if (touch === undefined) {
-              return; // the "touch" property is only defined in SDL
-  
-            }
-            var adjustedX = touch.pageX - (scrollX + rect.left);
-            var adjustedY = touch.pageY - (scrollY + rect.top);
-  
-            adjustedX = adjustedX * (cw / rect.width);
-            adjustedY = adjustedY * (ch / rect.height);
-  
-            var coords = { x: adjustedX, y: adjustedY };
-  
-            if (event.type === 'touchstart') {
-              Browser.lastTouches[touch.identifier] = coords;
-              Browser.touches[touch.identifier] = coords;
-            } else if (event.type === 'touchend' || event.type === 'touchmove') {
-              var last = Browser.touches[touch.identifier];
-              if (!last) last = coords;
-              Browser.lastTouches[touch.identifier] = last;
-              Browser.touches[touch.identifier] = coords;
-            }
-            return;
-          }
-  
-          var x = event.pageX - (scrollX + rect.left);
-          var y = event.pageY - (scrollY + rect.top);
-  
-          // the canvas might be CSS-scaled compared to its backbuffer;
-          // SDL-using content will want mouse coordinates in terms
-          // of backbuffer units.
-          x = x * (cw / rect.width);
-          y = y * (ch / rect.height);
-  
-          Browser.mouseMovementX = x - Browser.mouseX;
-          Browser.mouseMovementY = y - Browser.mouseY;
-          Browser.mouseX = x;
-          Browser.mouseY = y;
-        }
-      },resizeListeners:[],updateResizeListeners:function() {
-        var canvas = Module['canvas'];
-        Browser.resizeListeners.forEach(function(listener) {
-          listener(canvas.width, canvas.height);
-        });
-      },setCanvasSize:function(width, height, noUpdates) {
-        var canvas = Module['canvas'];
-        Browser.updateCanvasDimensions(canvas, width, height);
-        if (!noUpdates) Browser.updateResizeListeners();
-      },windowedWidth:0,windowedHeight:0,setFullscreenCanvasSize:function() {
-        // check if SDL is available
-        if (typeof SDL != "undefined") {
-          var flags = HEAPU32[((SDL.screen)>>2)];
-          flags = flags | 0x00800000; // set SDL_FULLSCREEN flag
-          HEAP32[((SDL.screen)>>2)] = flags;
-        }
-        Browser.updateCanvasDimensions(Module['canvas']);
-        Browser.updateResizeListeners();
-      },setWindowedCanvasSize:function() {
-        // check if SDL is available
-        if (typeof SDL != "undefined") {
-          var flags = HEAPU32[((SDL.screen)>>2)];
-          flags = flags & ~0x00800000; // clear SDL_FULLSCREEN flag
-          HEAP32[((SDL.screen)>>2)] = flags;
-        }
-        Browser.updateCanvasDimensions(Module['canvas']);
-        Browser.updateResizeListeners();
-      },updateCanvasDimensions:function(canvas, wNative, hNative) {
-        if (wNative && hNative) {
-          canvas.widthNative = wNative;
-          canvas.heightNative = hNative;
-        } else {
-          wNative = canvas.widthNative;
-          hNative = canvas.heightNative;
-        }
-        var w = wNative;
-        var h = hNative;
-        if (Module['forcedAspectRatio'] && Module['forcedAspectRatio'] > 0) {
-          if (w/h < Module['forcedAspectRatio']) {
-            w = Math.round(h * Module['forcedAspectRatio']);
-          } else {
-            h = Math.round(w / Module['forcedAspectRatio']);
-          }
-        }
-        if (((document['fullscreenElement'] || document['mozFullScreenElement'] ||
-             document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
-             document['webkitCurrentFullScreenElement']) === canvas.parentNode) && (typeof screen != 'undefined')) {
-           var factor = Math.min(screen.width / w, screen.height / h);
-           w = Math.round(w * factor);
-           h = Math.round(h * factor);
-        }
-        if (Browser.resizeCanvas) {
-          if (canvas.width  != w) canvas.width  = w;
-          if (canvas.height != h) canvas.height = h;
-          if (typeof canvas.style != 'undefined') {
-            canvas.style.removeProperty( "width");
-            canvas.style.removeProperty("height");
-          }
-        } else {
-          if (canvas.width  != wNative) canvas.width  = wNative;
-          if (canvas.height != hNative) canvas.height = hNative;
-          if (typeof canvas.style != 'undefined') {
-            if (w != wNative || h != hNative) {
-              canvas.style.setProperty( "width", w + "px", "important");
-              canvas.style.setProperty("height", h + "px", "important");
-            } else {
-              canvas.style.removeProperty( "width");
-              canvas.style.removeProperty("height");
-            }
-          }
-        }
-      }};
-  function _emscripten_set_main_loop_timing(mode, value) {
-      Browser.mainLoop.timingMode = mode;
-      Browser.mainLoop.timingValue = value;
-  
-      if (!Browser.mainLoop.func) {
-        err('emscripten_set_main_loop_timing: Cannot set timing mode for main loop since a main loop does not exist! Call emscripten_set_main_loop first to set one up.');
-        return 1; // Return non-zero on failure, can't set timing mode when there is no main loop.
-      }
-  
-      if (!Browser.mainLoop.running) {
-        
-        Browser.mainLoop.running = true;
-      }
-      if (mode == 0 /*EM_TIMING_SETTIMEOUT*/) {
-        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setTimeout() {
-          var timeUntilNextTick = Math.max(0, Browser.mainLoop.tickStartTime + value - _emscripten_get_now())|0;
-          setTimeout(Browser.mainLoop.runner, timeUntilNextTick); // doing this each time means that on exception, we stop
-        };
-        Browser.mainLoop.method = 'timeout';
-      } else if (mode == 1 /*EM_TIMING_RAF*/) {
-        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_rAF() {
-          Browser.requestAnimationFrame(Browser.mainLoop.runner);
-        };
-        Browser.mainLoop.method = 'rAF';
-      } else if (mode == 2 /*EM_TIMING_SETIMMEDIATE*/) {
-        if (typeof setImmediate == 'undefined') {
-          // Emulate setImmediate. (note: not a complete polyfill, we don't emulate clearImmediate() to keep code size to minimum, since not needed)
-          var setImmediates = [];
-          var emscriptenMainLoopMessageId = 'setimmediate';
-          var Browser_setImmediate_messageHandler = function(/** @type {Event} */ event) {
-            // When called in current thread or Worker, the main loop ID is structured slightly different to accommodate for --proxy-to-worker runtime listening to Worker events,
-            // so check for both cases.
-            if (event.data === emscriptenMainLoopMessageId || event.data.target === emscriptenMainLoopMessageId) {
-              event.stopPropagation();
-              setImmediates.shift()();
-            }
-          }
-          addEventListener("message", Browser_setImmediate_messageHandler, true);
-          setImmediate = /** @type{function(function(): ?, ...?): number} */(function Browser_emulated_setImmediate(func) {
-            setImmediates.push(func);
-            if (ENVIRONMENT_IS_WORKER) {
-              if (Module['setImmediates'] === undefined) Module['setImmediates'] = [];
-              Module['setImmediates'].push(func);
-              postMessage({target: emscriptenMainLoopMessageId}); // In --proxy-to-worker, route the message via proxyClient.js
-            } else postMessage(emscriptenMainLoopMessageId, "*"); // On the main thread, can just send the message to itself.
-          })
-        }
-        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setImmediate() {
-          setImmediate(Browser.mainLoop.runner);
-        };
-        Browser.mainLoop.method = 'immediate';
-      }
-      return 0;
-    }
-  
-  var _emscripten_get_now;if (ENVIRONMENT_IS_NODE) {
-    _emscripten_get_now = () => {
-      var t = process['hrtime']();
-      return t[0] * 1e3 + t[1] / 1e6;
-    };
-  } else _emscripten_get_now = () => performance.now();
-  ;
-  
-  function _exit(status) {
-      // void _exit(int status);
-      // http://pubs.opengroup.org/onlinepubs/000095399/functions/exit.html
-      exit(status);
-    }
-  function maybeExit() {
-    }
-  
-    /**
-     * @param {number=} arg
-     * @param {boolean=} noSetTiming
-     */
-  function setMainLoop(browserIterationFunc, fps, simulateInfiniteLoop, arg, noSetTiming) {
-      assert(!Browser.mainLoop.func, 'emscripten_set_main_loop: there can only be one main loop function at once: call emscripten_cancel_main_loop to cancel the previous one before setting a new one with different parameters.');
-  
-      Browser.mainLoop.func = browserIterationFunc;
-      Browser.mainLoop.arg = arg;
-  
-      var thisMainLoopId = Browser.mainLoop.currentlyRunningMainloop;
-      function checkIsRunning() {
-        if (thisMainLoopId < Browser.mainLoop.currentlyRunningMainloop) {
-          
-          maybeExit();
-          return false;
-        }
-        return true;
-      }
-  
-      // We create the loop runner here but it is not actually running until
-      // _emscripten_set_main_loop_timing is called (which might happen a
-      // later time).  This member signifies that the current runner has not
-      // yet been started so that we can call runtimeKeepalivePush when it
-      // gets it timing set for the first time.
-      Browser.mainLoop.running = false;
-      Browser.mainLoop.runner = function Browser_mainLoop_runner() {
-        if (ABORT) return;
-        if (Browser.mainLoop.queue.length > 0) {
-          var start = Date.now();
-          var blocker = Browser.mainLoop.queue.shift();
-          blocker.func(blocker.arg);
-          if (Browser.mainLoop.remainingBlockers) {
-            var remaining = Browser.mainLoop.remainingBlockers;
-            var next = remaining%1 == 0 ? remaining-1 : Math.floor(remaining);
-            if (blocker.counted) {
-              Browser.mainLoop.remainingBlockers = next;
-            } else {
-              // not counted, but move the progress along a tiny bit
-              next = next + 0.5; // do not steal all the next one's progress
-              Browser.mainLoop.remainingBlockers = (8*remaining + next)/9;
-            }
-          }
-          out('main loop blocker "' + blocker.name + '" took ' + (Date.now() - start) + ' ms'); //, left: ' + Browser.mainLoop.remainingBlockers);
-          Browser.mainLoop.updateStatus();
-  
-          // catches pause/resume main loop from blocker execution
-          if (!checkIsRunning()) return;
-  
-          setTimeout(Browser.mainLoop.runner, 0);
-          return;
-        }
-  
-        // catch pauses from non-main loop sources
-        if (!checkIsRunning()) return;
-  
-        // Implement very basic swap interval control
-        Browser.mainLoop.currentFrameNumber = Browser.mainLoop.currentFrameNumber + 1 | 0;
-        if (Browser.mainLoop.timingMode == 1/*EM_TIMING_RAF*/ && Browser.mainLoop.timingValue > 1 && Browser.mainLoop.currentFrameNumber % Browser.mainLoop.timingValue != 0) {
-          // Not the scheduled time to render this frame - skip.
-          Browser.mainLoop.scheduler();
-          return;
-        } else if (Browser.mainLoop.timingMode == 0/*EM_TIMING_SETTIMEOUT*/) {
-          Browser.mainLoop.tickStartTime = _emscripten_get_now();
-        }
-  
-        // Signal GL rendering layer that processing of a new frame is about to start. This helps it optimize
-        // VBO double-buffering and reduce GPU stalls.
-  
-        if (Browser.mainLoop.method === 'timeout' && Module.ctx) {
-          warnOnce('Looks like you are rendering without using requestAnimationFrame for the main loop. You should use 0 for the frame rate in emscripten_set_main_loop in order to use requestAnimationFrame, as that can greatly improve your frame rates!');
-          Browser.mainLoop.method = ''; // just warn once per call to set main loop
-        }
-  
-        Browser.mainLoop.runIter(browserIterationFunc);
-  
-        checkStackCookie();
-  
-        // catch pauses from the main loop itself
-        if (!checkIsRunning()) return;
-  
-        // Queue new audio data. This is important to be right after the main loop invocation, so that we will immediately be able
-        // to queue the newest produced audio samples.
-        // TODO: Consider adding pre- and post- rAF callbacks so that GL.newRenderingFrameStarted() and SDL.audio.queueNewAudioData()
-        //       do not need to be hardcoded into this function, but can be more generic.
-        if (typeof SDL == 'object' && SDL.audio && SDL.audio.queueNewAudioData) SDL.audio.queueNewAudioData();
-  
-        Browser.mainLoop.scheduler();
-      }
-  
-      if (!noSetTiming) {
-        if (fps && fps > 0) _emscripten_set_main_loop_timing(0/*EM_TIMING_SETTIMEOUT*/, 1000.0 / fps);
-        else _emscripten_set_main_loop_timing(1/*EM_TIMING_RAF*/, 1); // Do rAF by rendering each frame (no decimating)
-  
-        Browser.mainLoop.scheduler();
-      }
-  
-      if (simulateInfiniteLoop) {
-        throw 'unwind';
-      }
-    }
-  function _emscripten_set_main_loop(func, fps, simulateInfiniteLoop) {
-      var browserIterationFunc = getWasmTableEntry(func);
-      setMainLoop(browserIterationFunc, fps, simulateInfiniteLoop);
-    }
-
-  var ENV = {};
-  
-  function getExecutableName() {
-      return thisProgram || './this.program';
-    }
-  function getEnvStrings() {
-      if (!getEnvStrings.strings) {
-        // Default values.
-        // Browser language detection #8751
-        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
-        var env = {
-          'USER': 'web_user',
-          'LOGNAME': 'web_user',
-          'PATH': '/',
-          'PWD': '/',
-          'HOME': '/home/web_user',
-          'LANG': lang,
-          '_': getExecutableName()
-        };
-        // Apply the user-provided values, if any.
-        for (var x in ENV) {
-          // x is a key in ENV; if ENV[x] is undefined, that means it was
-          // explicitly set to be so. We allow user code to do that to
-          // force variables with default values to remain unset.
-          if (ENV[x] === undefined) delete env[x];
-          else env[x] = ENV[x];
-        }
-        var strings = [];
-        for (var x in env) {
-          strings.push(x + '=' + env[x]);
-        }
-        getEnvStrings.strings = strings;
-      }
-      return getEnvStrings.strings;
-    }
-  
   var PATH = {isAbs:(path) => path.charAt(0) === '/',splitPath:(filename) => {
         var splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/;
         return splitPathRe.exec(filename).slice(1);
@@ -6251,6 +4294,1976 @@ var ASM_CONSTS = {
         if (!stream) throw new FS.ErrnoError(8);
         return stream;
       }};
+  function ___syscall_openat(dirfd, path, flags, varargs) {
+  SYSCALLS.varargs = varargs;
+  try {
+  
+      path = SYSCALLS.getStr(path);
+      path = SYSCALLS.calculateAt(dirfd, path);
+      var mode = varargs ? SYSCALLS.get() : 0;
+      return FS.open(path, flags, mode).fd;
+    } catch (e) {
+    if (typeof FS == 'undefined' || !(e instanceof FS.ErrnoError)) throw e;
+    return -e.errno;
+  }
+  }
+
+  function __embind_register_bigint(primitiveType, name, size, minRange, maxRange) {}
+
+  function getShiftFromSize(size) {
+      switch (size) {
+          case 1: return 0;
+          case 2: return 1;
+          case 4: return 2;
+          case 8: return 3;
+          default:
+              throw new TypeError('Unknown type size: ' + size);
+      }
+    }
+  
+  function embind_init_charCodes() {
+      var codes = new Array(256);
+      for (var i = 0; i < 256; ++i) {
+          codes[i] = String.fromCharCode(i);
+      }
+      embind_charCodes = codes;
+    }
+  var embind_charCodes = undefined;
+  function readLatin1String(ptr) {
+      var ret = "";
+      var c = ptr;
+      while (HEAPU8[c]) {
+          ret += embind_charCodes[HEAPU8[c++]];
+      }
+      return ret;
+    }
+  
+  var awaitingDependencies = {};
+  
+  var registeredTypes = {};
+  
+  var typeDependencies = {};
+  
+  var char_0 = 48;
+  
+  var char_9 = 57;
+  function makeLegalFunctionName(name) {
+      if (undefined === name) {
+        return '_unknown';
+      }
+      name = name.replace(/[^a-zA-Z0-9_]/g, '$');
+      var f = name.charCodeAt(0);
+      if (f >= char_0 && f <= char_9) {
+        return '_' + name;
+      }
+      return name;
+    }
+  function createNamedFunction(name, body) {
+      name = makeLegalFunctionName(name);
+      /*jshint evil:true*/
+      return new Function(
+          "body",
+          "return function " + name + "() {\n" +
+          "    \"use strict\";" +
+          "    return body.apply(this, arguments);\n" +
+          "};\n"
+      )(body);
+    }
+  function extendError(baseErrorType, errorName) {
+      var errorClass = createNamedFunction(errorName, function(message) {
+          this.name = errorName;
+          this.message = message;
+  
+          var stack = (new Error(message)).stack;
+          if (stack !== undefined) {
+              this.stack = this.toString() + '\n' +
+                  stack.replace(/^Error(:[^\n]*)?\n/, '');
+          }
+      });
+      errorClass.prototype = Object.create(baseErrorType.prototype);
+      errorClass.prototype.constructor = errorClass;
+      errorClass.prototype.toString = function() {
+          if (this.message === undefined) {
+              return this.name;
+          } else {
+              return this.name + ': ' + this.message;
+          }
+      };
+  
+      return errorClass;
+    }
+  var BindingError = undefined;
+  function throwBindingError(message) {
+      throw new BindingError(message);
+    }
+  
+  var InternalError = undefined;
+  function throwInternalError(message) {
+      throw new InternalError(message);
+    }
+  function whenDependentTypesAreResolved(myTypes, dependentTypes, getTypeConverters) {
+      myTypes.forEach(function(type) {
+          typeDependencies[type] = dependentTypes;
+      });
+  
+      function onComplete(typeConverters) {
+          var myTypeConverters = getTypeConverters(typeConverters);
+          if (myTypeConverters.length !== myTypes.length) {
+              throwInternalError('Mismatched type converter count');
+          }
+          for (var i = 0; i < myTypes.length; ++i) {
+              registerType(myTypes[i], myTypeConverters[i]);
+          }
+      }
+  
+      var typeConverters = new Array(dependentTypes.length);
+      var unregisteredTypes = [];
+      var registered = 0;
+      dependentTypes.forEach((dt, i) => {
+        if (registeredTypes.hasOwnProperty(dt)) {
+          typeConverters[i] = registeredTypes[dt];
+        } else {
+          unregisteredTypes.push(dt);
+          if (!awaitingDependencies.hasOwnProperty(dt)) {
+            awaitingDependencies[dt] = [];
+          }
+          awaitingDependencies[dt].push(() => {
+            typeConverters[i] = registeredTypes[dt];
+            ++registered;
+            if (registered === unregisteredTypes.length) {
+              onComplete(typeConverters);
+            }
+          });
+        }
+      });
+      if (0 === unregisteredTypes.length) {
+        onComplete(typeConverters);
+      }
+    }
+  /** @param {Object=} options */
+  function registerType(rawType, registeredInstance, options = {}) {
+      if (!('argPackAdvance' in registeredInstance)) {
+          throw new TypeError('registerType registeredInstance requires argPackAdvance');
+      }
+  
+      var name = registeredInstance.name;
+      if (!rawType) {
+          throwBindingError('type "' + name + '" must have a positive integer typeid pointer');
+      }
+      if (registeredTypes.hasOwnProperty(rawType)) {
+          if (options.ignoreDuplicateRegistrations) {
+              return;
+          } else {
+              throwBindingError("Cannot register type '" + name + "' twice");
+          }
+      }
+  
+      registeredTypes[rawType] = registeredInstance;
+      delete typeDependencies[rawType];
+  
+      if (awaitingDependencies.hasOwnProperty(rawType)) {
+        var callbacks = awaitingDependencies[rawType];
+        delete awaitingDependencies[rawType];
+        callbacks.forEach((cb) => cb());
+      }
+    }
+  function __embind_register_bool(rawType, name, size, trueValue, falseValue) {
+      var shift = getShiftFromSize(size);
+  
+      name = readLatin1String(name);
+      registerType(rawType, {
+          name: name,
+          'fromWireType': function(wt) {
+              // ambiguous emscripten ABI: sometimes return values are
+              // true or false, and sometimes integers (0 or 1)
+              return !!wt;
+          },
+          'toWireType': function(destructors, o) {
+              return o ? trueValue : falseValue;
+          },
+          'argPackAdvance': 8,
+          'readValueFromPointer': function(pointer) {
+              // TODO: if heap is fixed (like in asm.js) this could be executed outside
+              var heap;
+              if (size === 1) {
+                  heap = HEAP8;
+              } else if (size === 2) {
+                  heap = HEAP16;
+              } else if (size === 4) {
+                  heap = HEAP32;
+              } else {
+                  throw new TypeError("Unknown boolean type size: " + name);
+              }
+              return this['fromWireType'](heap[pointer >> shift]);
+          },
+          destructorFunction: null, // This type does not need a destructor
+      });
+    }
+
+  var emval_free_list = [];
+  
+  var emval_handle_array = [{},{value:undefined},{value:null},{value:true},{value:false}];
+  function __emval_decref(handle) {
+      if (handle > 4 && 0 === --emval_handle_array[handle].refcount) {
+        emval_handle_array[handle] = undefined;
+        emval_free_list.push(handle);
+      }
+    }
+  
+  function count_emval_handles() {
+      var count = 0;
+      for (var i = 5; i < emval_handle_array.length; ++i) {
+        if (emval_handle_array[i] !== undefined) {
+          ++count;
+        }
+      }
+      return count;
+    }
+  
+  function get_first_emval() {
+      for (var i = 5; i < emval_handle_array.length; ++i) {
+        if (emval_handle_array[i] !== undefined) {
+          return emval_handle_array[i];
+        }
+      }
+      return null;
+    }
+  function init_emval() {
+      Module['count_emval_handles'] = count_emval_handles;
+      Module['get_first_emval'] = get_first_emval;
+    }
+  var Emval = {toValue:(handle) => {
+        if (!handle) {
+            throwBindingError('Cannot use deleted val. handle = ' + handle);
+        }
+        return emval_handle_array[handle].value;
+      },toHandle:(value) => {
+        switch (value) {
+          case undefined: return 1;
+          case null: return 2;
+          case true: return 3;
+          case false: return 4;
+          default:{
+            var handle = emval_free_list.length ?
+                emval_free_list.pop() :
+                emval_handle_array.length;
+  
+            emval_handle_array[handle] = {refcount: 1, value: value};
+            return handle;
+          }
+        }
+      }};
+  
+  function simpleReadValueFromPointer(pointer) {
+      return this['fromWireType'](HEAPU32[pointer >> 2]);
+    }
+  function __embind_register_emval(rawType, name) {
+      name = readLatin1String(name);
+      registerType(rawType, {
+        name: name,
+        'fromWireType': function(handle) {
+          var rv = Emval.toValue(handle);
+          __emval_decref(handle);
+          return rv;
+        },
+        'toWireType': function(destructors, value) {
+          return Emval.toHandle(value);
+        },
+        'argPackAdvance': 8,
+        'readValueFromPointer': simpleReadValueFromPointer,
+        destructorFunction: null, // This type does not need a destructor
+  
+        // TODO: do we need a deleteObject here?  write a test where
+        // emval is passed into JS via an interface
+      });
+    }
+
+  function _embind_repr(v) {
+      if (v === null) {
+          return 'null';
+      }
+      var t = typeof v;
+      if (t === 'object' || t === 'array' || t === 'function') {
+          return v.toString();
+      } else {
+          return '' + v;
+      }
+    }
+  
+  function floatReadValueFromPointer(name, shift) {
+      switch (shift) {
+          case 2: return function(pointer) {
+              return this['fromWireType'](HEAPF32[pointer >> 2]);
+          };
+          case 3: return function(pointer) {
+              return this['fromWireType'](HEAPF64[pointer >> 3]);
+          };
+          default:
+              throw new TypeError("Unknown float type: " + name);
+      }
+    }
+  function __embind_register_float(rawType, name, size) {
+      var shift = getShiftFromSize(size);
+      name = readLatin1String(name);
+      registerType(rawType, {
+          name: name,
+          'fromWireType': function(value) {
+               return value;
+          },
+          'toWireType': function(destructors, value) {
+              if (typeof value != "number" && typeof value != "boolean") {
+                  throw new TypeError('Cannot convert "' + _embind_repr(value) + '" to ' + this.name);
+              }
+              // The VM will perform JS to Wasm value conversion, according to the spec:
+              // https://www.w3.org/TR/wasm-js-api-1/#towebassemblyvalue
+              return value;
+          },
+          'argPackAdvance': 8,
+          'readValueFromPointer': floatReadValueFromPointer(name, shift),
+          destructorFunction: null, // This type does not need a destructor
+      });
+    }
+
+  function new_(constructor, argumentList) {
+      if (!(constructor instanceof Function)) {
+        throw new TypeError('new_ called with constructor type ' + typeof(constructor) + " which is not a function");
+      }
+      /*
+       * Previously, the following line was just:
+       *   function dummy() {};
+       * Unfortunately, Chrome was preserving 'dummy' as the object's name, even
+       * though at creation, the 'dummy' has the correct constructor name.  Thus,
+       * objects created with IMVU.new would show up in the debugger as 'dummy',
+       * which isn't very helpful.  Using IMVU.createNamedFunction addresses the
+       * issue.  Doublely-unfortunately, there's no way to write a test for this
+       * behavior.  -NRD 2013.02.22
+       */
+      var dummy = createNamedFunction(constructor.name || 'unknownFunctionName', function(){});
+      dummy.prototype = constructor.prototype;
+      var obj = new dummy;
+  
+      var r = constructor.apply(obj, argumentList);
+      return (r instanceof Object) ? r : obj;
+    }
+  
+  function runDestructors(destructors) {
+      while (destructors.length) {
+        var ptr = destructors.pop();
+        var del = destructors.pop();
+        del(ptr);
+      }
+    }
+  function craftInvokerFunction(humanName, argTypes, classType, cppInvokerFunc, cppTargetFunc) {
+      // humanName: a human-readable string name for the function to be generated.
+      // argTypes: An array that contains the embind type objects for all types in the function signature.
+      //    argTypes[0] is the type object for the function return value.
+      //    argTypes[1] is the type object for function this object/class type, or null if not crafting an invoker for a class method.
+      //    argTypes[2...] are the actual function parameters.
+      // classType: The embind type object for the class to be bound, or null if this is not a method of a class.
+      // cppInvokerFunc: JS Function object to the C++-side function that interops into C++ code.
+      // cppTargetFunc: Function pointer (an integer to FUNCTION_TABLE) to the target C++ function the cppInvokerFunc will end up calling.
+      var argCount = argTypes.length;
+  
+      if (argCount < 2) {
+        throwBindingError("argTypes array size mismatch! Must at least get return value and 'this' types!");
+      }
+  
+      var isClassMethodFunc = (argTypes[1] !== null && classType !== null);
+  
+      // Free functions with signature "void function()" do not need an invoker that marshalls between wire types.
+  // TODO: This omits argument count check - enable only at -O3 or similar.
+  //    if (ENABLE_UNSAFE_OPTS && argCount == 2 && argTypes[0].name == "void" && !isClassMethodFunc) {
+  //       return FUNCTION_TABLE[fn];
+  //    }
+  
+      // Determine if we need to use a dynamic stack to store the destructors for the function parameters.
+      // TODO: Remove this completely once all function invokers are being dynamically generated.
+      var needsDestructorStack = false;
+  
+      for (var i = 1; i < argTypes.length; ++i) { // Skip return value at index 0 - it's not deleted here.
+        if (argTypes[i] !== null && argTypes[i].destructorFunction === undefined) { // The type does not define a destructor function - must use dynamic stack
+          needsDestructorStack = true;
+          break;
+        }
+      }
+  
+      var returns = (argTypes[0].name !== "void");
+  
+      var argsList = "";
+      var argsListWired = "";
+      for (var i = 0; i < argCount - 2; ++i) {
+        argsList += (i!==0?", ":"")+"arg"+i;
+        argsListWired += (i!==0?", ":"")+"arg"+i+"Wired";
+      }
+  
+      var invokerFnBody =
+          "return function "+makeLegalFunctionName(humanName)+"("+argsList+") {\n" +
+          "if (arguments.length !== "+(argCount - 2)+") {\n" +
+              "throwBindingError('function "+humanName+" called with ' + arguments.length + ' arguments, expected "+(argCount - 2)+" args!');\n" +
+          "}\n";
+  
+      if (needsDestructorStack) {
+        invokerFnBody += "var destructors = [];\n";
+      }
+  
+      var dtorStack = needsDestructorStack ? "destructors" : "null";
+      var args1 = ["throwBindingError", "invoker", "fn", "runDestructors", "retType", "classParam"];
+      var args2 = [throwBindingError, cppInvokerFunc, cppTargetFunc, runDestructors, argTypes[0], argTypes[1]];
+  
+      if (isClassMethodFunc) {
+        invokerFnBody += "var thisWired = classParam.toWireType("+dtorStack+", this);\n";
+      }
+  
+      for (var i = 0; i < argCount - 2; ++i) {
+        invokerFnBody += "var arg"+i+"Wired = argType"+i+".toWireType("+dtorStack+", arg"+i+"); // "+argTypes[i+2].name+"\n";
+        args1.push("argType"+i);
+        args2.push(argTypes[i+2]);
+      }
+  
+      if (isClassMethodFunc) {
+        argsListWired = "thisWired" + (argsListWired.length > 0 ? ", " : "") + argsListWired;
+      }
+  
+      invokerFnBody +=
+          (returns?"var rv = ":"") + "invoker(fn"+(argsListWired.length>0?", ":"")+argsListWired+");\n";
+  
+      if (needsDestructorStack) {
+        invokerFnBody += "runDestructors(destructors);\n";
+      } else {
+        for (var i = isClassMethodFunc?1:2; i < argTypes.length; ++i) { // Skip return value at index 0 - it's not deleted here. Also skip class type if not a method.
+          var paramName = (i === 1 ? "thisWired" : ("arg"+(i - 2)+"Wired"));
+          if (argTypes[i].destructorFunction !== null) {
+            invokerFnBody += paramName+"_dtor("+paramName+"); // "+argTypes[i].name+"\n";
+            args1.push(paramName+"_dtor");
+            args2.push(argTypes[i].destructorFunction);
+          }
+        }
+      }
+  
+      if (returns) {
+        invokerFnBody += "var ret = retType.fromWireType(rv);\n" +
+                         "return ret;\n";
+      } else {
+      }
+  
+      invokerFnBody += "}\n";
+  
+      args1.push(invokerFnBody);
+  
+      var invokerFunction = new_(Function, args1).apply(null, args2);
+      return invokerFunction;
+    }
+  
+  function ensureOverloadTable(proto, methodName, humanName) {
+      if (undefined === proto[methodName].overloadTable) {
+        var prevFunc = proto[methodName];
+        // Inject an overload resolver function that routes to the appropriate overload based on the number of arguments.
+        proto[methodName] = function() {
+          // TODO This check can be removed in -O3 level "unsafe" optimizations.
+          if (!proto[methodName].overloadTable.hasOwnProperty(arguments.length)) {
+              throwBindingError("Function '" + humanName + "' called with an invalid number of arguments (" + arguments.length + ") - expects one of (" + proto[methodName].overloadTable + ")!");
+          }
+          return proto[methodName].overloadTable[arguments.length].apply(this, arguments);
+        };
+        // Move the previous function into the overload table.
+        proto[methodName].overloadTable = [];
+        proto[methodName].overloadTable[prevFunc.argCount] = prevFunc;
+      }
+    }
+  /** @param {number=} numArguments */
+  function exposePublicSymbol(name, value, numArguments) {
+      if (Module.hasOwnProperty(name)) {
+        if (undefined === numArguments || (undefined !== Module[name].overloadTable && undefined !== Module[name].overloadTable[numArguments])) {
+          throwBindingError("Cannot register public name '" + name + "' twice");
+        }
+  
+        // We are exposing a function with the same name as an existing function. Create an overload table and a function selector
+        // that routes between the two.
+        ensureOverloadTable(Module, name, name);
+        if (Module.hasOwnProperty(numArguments)) {
+            throwBindingError("Cannot register multiple overloads of a function with the same number of arguments (" + numArguments + ")!");
+        }
+        // Add the new function into the overload table.
+        Module[name].overloadTable[numArguments] = value;
+      }
+      else {
+        Module[name] = value;
+        if (undefined !== numArguments) {
+          Module[name].numArguments = numArguments;
+        }
+      }
+    }
+  
+  function heap32VectorToArray(count, firstElement) {
+      var array = [];
+      for (var i = 0; i < count; i++) {
+          array.push(HEAP32[(firstElement >> 2) + i]);
+      }
+      return array;
+    }
+  
+  /** @param {number=} numArguments */
+  function replacePublicSymbol(name, value, numArguments) {
+      if (!Module.hasOwnProperty(name)) {
+        throwInternalError('Replacing nonexistant public symbol');
+      }
+      // If there's an overload table for this symbol, replace the symbol in the overload table instead.
+      if (undefined !== Module[name].overloadTable && undefined !== numArguments) {
+        Module[name].overloadTable[numArguments] = value;
+      }
+      else {
+        Module[name] = value;
+        Module[name].argCount = numArguments;
+      }
+    }
+  
+  function dynCallLegacy(sig, ptr, args) {
+      assert(('dynCall_' + sig) in Module, 'bad function pointer type - no table for sig \'' + sig + '\'');
+      if (args && args.length) {
+        // j (64-bit integer) must be passed in as two numbers [low 32, high 32].
+        assert(args.length === sig.substring(1).replace(/j/g, '--').length);
+      } else {
+        assert(sig.length == 1);
+      }
+      var f = Module["dynCall_" + sig];
+      return args && args.length ? f.apply(null, [ptr].concat(args)) : f.call(null, ptr);
+    }
+  /** @param {Object=} args */
+  function dynCall(sig, ptr, args) {
+      // Without WASM_BIGINT support we cannot directly call function with i64 as
+      // part of thier signature, so we rely the dynCall functions generated by
+      // wasm-emscripten-finalize
+      if (sig.includes('j')) {
+        return dynCallLegacy(sig, ptr, args);
+      }
+      assert(getWasmTableEntry(ptr), 'missing table entry in dynCall: ' + ptr);
+      return getWasmTableEntry(ptr).apply(null, args)
+    }
+  function getDynCaller(sig, ptr) {
+      assert(sig.includes('j'), 'getDynCaller should only be called with i64 sigs')
+      var argCache = [];
+      return function() {
+        argCache.length = 0;
+        Object.assign(argCache, arguments);
+        return dynCall(sig, ptr, argCache);
+      };
+    }
+  function embind__requireFunction(signature, rawFunction) {
+      signature = readLatin1String(signature);
+  
+      function makeDynCaller() {
+        if (signature.includes('j')) {
+          return getDynCaller(signature, rawFunction);
+        }
+        return getWasmTableEntry(rawFunction);
+      }
+  
+      var fp = makeDynCaller();
+      if (typeof fp != "function") {
+          throwBindingError("unknown function pointer with signature " + signature + ": " + rawFunction);
+      }
+      return fp;
+    }
+  
+  var UnboundTypeError = undefined;
+  
+  function getTypeName(type) {
+      var ptr = ___getTypeName(type);
+      var rv = readLatin1String(ptr);
+      _free(ptr);
+      return rv;
+    }
+  function throwUnboundTypeError(message, types) {
+      var unboundTypes = [];
+      var seen = {};
+      function visit(type) {
+        if (seen[type]) {
+          return;
+        }
+        if (registeredTypes[type]) {
+          return;
+        }
+        if (typeDependencies[type]) {
+          typeDependencies[type].forEach(visit);
+          return;
+        }
+        unboundTypes.push(type);
+        seen[type] = true;
+      }
+      types.forEach(visit);
+  
+      throw new UnboundTypeError(message + ': ' + unboundTypes.map(getTypeName).join([', ']));
+    }
+  function __embind_register_function(name, argCount, rawArgTypesAddr, signature, rawInvoker, fn) {
+      var argTypes = heap32VectorToArray(argCount, rawArgTypesAddr);
+      name = readLatin1String(name);
+  
+      rawInvoker = embind__requireFunction(signature, rawInvoker);
+  
+      exposePublicSymbol(name, function() {
+          throwUnboundTypeError('Cannot call ' + name + ' due to unbound types', argTypes);
+      }, argCount - 1);
+  
+      whenDependentTypesAreResolved([], argTypes, function(argTypes) {
+          var invokerArgsArray = [argTypes[0] /* return value */, null /* no class 'this'*/].concat(argTypes.slice(1) /* actual params */);
+          replacePublicSymbol(name, craftInvokerFunction(name, invokerArgsArray, null /* no class 'this'*/, rawInvoker, fn), argCount - 1);
+          return [];
+      });
+    }
+
+  function integerReadValueFromPointer(name, shift, signed) {
+      // integers are quite common, so generate very specialized functions
+      switch (shift) {
+          case 0: return signed ?
+              function readS8FromPointer(pointer) { return HEAP8[pointer]; } :
+              function readU8FromPointer(pointer) { return HEAPU8[pointer]; };
+          case 1: return signed ?
+              function readS16FromPointer(pointer) { return HEAP16[pointer >> 1]; } :
+              function readU16FromPointer(pointer) { return HEAPU16[pointer >> 1]; };
+          case 2: return signed ?
+              function readS32FromPointer(pointer) { return HEAP32[pointer >> 2]; } :
+              function readU32FromPointer(pointer) { return HEAPU32[pointer >> 2]; };
+          default:
+              throw new TypeError("Unknown integer type: " + name);
+      }
+    }
+  function __embind_register_integer(primitiveType, name, size, minRange, maxRange) {
+      name = readLatin1String(name);
+      if (maxRange === -1) { // LLVM doesn't have signed and unsigned 32-bit types, so u32 literals come out as 'i32 -1'. Always treat those as max u32.
+          maxRange = 4294967295;
+      }
+  
+      var shift = getShiftFromSize(size);
+  
+      var fromWireType = (value) => value;
+  
+      if (minRange === 0) {
+          var bitshift = 32 - 8*size;
+          fromWireType = (value) => (value << bitshift) >>> bitshift;
+      }
+  
+      var isUnsignedType = (name.includes('unsigned'));
+      var checkAssertions = (value, toTypeName) => {
+          if (typeof value != "number" && typeof value != "boolean") {
+              throw new TypeError('Cannot convert "' + _embind_repr(value) + '" to ' + toTypeName);
+          }
+          if (value < minRange || value > maxRange) {
+              throw new TypeError('Passing a number "' + _embind_repr(value) + '" from JS side to C/C++ side to an argument of type "' + name + '", which is outside the valid range [' + minRange + ', ' + maxRange + ']!');
+          }
+      }
+      var toWireType;
+      if (isUnsignedType) {
+          toWireType = function(destructors, value) {
+              checkAssertions(value, this.name);
+              return value >>> 0;
+          }
+      } else {
+          toWireType = function(destructors, value) {
+              checkAssertions(value, this.name);
+              // The VM will perform JS to Wasm value conversion, according to the spec:
+              // https://www.w3.org/TR/wasm-js-api-1/#towebassemblyvalue
+              return value;
+          }
+      }
+      registerType(primitiveType, {
+          name: name,
+          'fromWireType': fromWireType,
+          'toWireType': toWireType,
+          'argPackAdvance': 8,
+          'readValueFromPointer': integerReadValueFromPointer(name, shift, minRange !== 0),
+          destructorFunction: null, // This type does not need a destructor
+      });
+    }
+
+  function __embind_register_memory_view(rawType, dataTypeIndex, name) {
+      var typeMapping = [
+        Int8Array,
+        Uint8Array,
+        Int16Array,
+        Uint16Array,
+        Int32Array,
+        Uint32Array,
+        Float32Array,
+        Float64Array,
+      ];
+  
+      var TA = typeMapping[dataTypeIndex];
+  
+      function decodeMemoryView(handle) {
+        handle = handle >> 2;
+        var heap = HEAPU32;
+        var size = heap[handle]; // in elements
+        var data = heap[handle + 1]; // byte offset into emscripten heap
+        return new TA(buffer, data, size);
+      }
+  
+      name = readLatin1String(name);
+      registerType(rawType, {
+        name: name,
+        'fromWireType': decodeMemoryView,
+        'argPackAdvance': 8,
+        'readValueFromPointer': decodeMemoryView,
+      }, {
+        ignoreDuplicateRegistrations: true,
+      });
+    }
+
+  function __embind_register_std_string(rawType, name) {
+      name = readLatin1String(name);
+      var stdStringIsUTF8
+      //process only std::string bindings with UTF8 support, in contrast to e.g. std::basic_string<unsigned char>
+      = (name === "std::string");
+  
+      registerType(rawType, {
+          name: name,
+          'fromWireType': function(value) {
+              var length = HEAPU32[value >> 2];
+  
+              var str;
+              if (stdStringIsUTF8) {
+                  var decodeStartPtr = value + 4;
+                  // Looping here to support possible embedded '0' bytes
+                  for (var i = 0; i <= length; ++i) {
+                      var currentBytePtr = value + 4 + i;
+                      if (i == length || HEAPU8[currentBytePtr] == 0) {
+                          var maxRead = currentBytePtr - decodeStartPtr;
+                          var stringSegment = UTF8ToString(decodeStartPtr, maxRead);
+                          if (str === undefined) {
+                              str = stringSegment;
+                          } else {
+                              str += String.fromCharCode(0);
+                              str += stringSegment;
+                          }
+                          decodeStartPtr = currentBytePtr + 1;
+                      }
+                  }
+              } else {
+                  var a = new Array(length);
+                  for (var i = 0; i < length; ++i) {
+                      a[i] = String.fromCharCode(HEAPU8[value + 4 + i]);
+                  }
+                  str = a.join('');
+              }
+  
+              _free(value);
+  
+              return str;
+          },
+          'toWireType': function(destructors, value) {
+              if (value instanceof ArrayBuffer) {
+                  value = new Uint8Array(value);
+              }
+  
+              var getLength;
+              var valueIsOfTypeString = (typeof value == 'string');
+  
+              if (!(valueIsOfTypeString || value instanceof Uint8Array || value instanceof Uint8ClampedArray || value instanceof Int8Array)) {
+                  throwBindingError('Cannot pass non-string to std::string');
+              }
+              if (stdStringIsUTF8 && valueIsOfTypeString) {
+                  getLength = () => lengthBytesUTF8(value);
+              } else {
+                  getLength = () => value.length;
+              }
+  
+              // assumes 4-byte alignment
+              var length = getLength();
+              var ptr = _malloc(4 + length + 1);
+              HEAPU32[ptr >> 2] = length;
+              if (stdStringIsUTF8 && valueIsOfTypeString) {
+                  stringToUTF8(value, ptr + 4, length + 1);
+              } else {
+                  if (valueIsOfTypeString) {
+                      for (var i = 0; i < length; ++i) {
+                          var charCode = value.charCodeAt(i);
+                          if (charCode > 255) {
+                              _free(ptr);
+                              throwBindingError('String has UTF-16 code units that do not fit in 8 bits');
+                          }
+                          HEAPU8[ptr + 4 + i] = charCode;
+                      }
+                  } else {
+                      for (var i = 0; i < length; ++i) {
+                          HEAPU8[ptr + 4 + i] = value[i];
+                      }
+                  }
+              }
+  
+              if (destructors !== null) {
+                  destructors.push(_free, ptr);
+              }
+              return ptr;
+          },
+          'argPackAdvance': 8,
+          'readValueFromPointer': simpleReadValueFromPointer,
+          destructorFunction: function(ptr) { _free(ptr); },
+      });
+    }
+
+  function __embind_register_std_wstring(rawType, charSize, name) {
+      name = readLatin1String(name);
+      var decodeString, encodeString, getHeap, lengthBytesUTF, shift;
+      if (charSize === 2) {
+        decodeString = UTF16ToString;
+        encodeString = stringToUTF16;
+        lengthBytesUTF = lengthBytesUTF16;
+        getHeap = () => HEAPU16;
+        shift = 1;
+      } else if (charSize === 4) {
+        decodeString = UTF32ToString;
+        encodeString = stringToUTF32;
+        lengthBytesUTF = lengthBytesUTF32;
+        getHeap = () => HEAPU32;
+        shift = 2;
+      }
+      registerType(rawType, {
+        name: name,
+        'fromWireType': function(value) {
+          // Code mostly taken from _embind_register_std_string fromWireType
+          var length = HEAPU32[value >> 2];
+          var HEAP = getHeap();
+          var str;
+  
+          var decodeStartPtr = value + 4;
+          // Looping here to support possible embedded '0' bytes
+          for (var i = 0; i <= length; ++i) {
+            var currentBytePtr = value + 4 + i * charSize;
+            if (i == length || HEAP[currentBytePtr >> shift] == 0) {
+              var maxReadBytes = currentBytePtr - decodeStartPtr;
+              var stringSegment = decodeString(decodeStartPtr, maxReadBytes);
+              if (str === undefined) {
+                str = stringSegment;
+              } else {
+                str += String.fromCharCode(0);
+                str += stringSegment;
+              }
+              decodeStartPtr = currentBytePtr + charSize;
+            }
+          }
+  
+          _free(value);
+  
+          return str;
+        },
+        'toWireType': function(destructors, value) {
+          if (!(typeof value == 'string')) {
+            throwBindingError('Cannot pass non-string to C++ string type ' + name);
+          }
+  
+          // assumes 4-byte alignment
+          var length = lengthBytesUTF(value);
+          var ptr = _malloc(4 + length + charSize);
+          HEAPU32[ptr >> 2] = length >> shift;
+  
+          encodeString(value, ptr + 4, length + charSize);
+  
+          if (destructors !== null) {
+            destructors.push(_free, ptr);
+          }
+          return ptr;
+        },
+        'argPackAdvance': 8,
+        'readValueFromPointer': simpleReadValueFromPointer,
+        destructorFunction: function(ptr) { _free(ptr); },
+      });
+    }
+
+  function __embind_register_void(rawType, name) {
+      name = readLatin1String(name);
+      registerType(rawType, {
+          isVoid: true, // void return values can be optimized out sometimes
+          name: name,
+          'argPackAdvance': 0,
+          'fromWireType': function() {
+              return undefined;
+          },
+          'toWireType': function(destructors, o) {
+              // TODO: assert if anything else is given?
+              return undefined;
+          },
+      });
+    }
+
+  function requireRegisteredType(rawType, humanName) {
+      var impl = registeredTypes[rawType];
+      if (undefined === impl) {
+          throwBindingError(humanName + " has unknown type " + getTypeName(rawType));
+      }
+      return impl;
+    }
+  function __emval_as(handle, returnType, destructorsRef) {
+      handle = Emval.toValue(handle);
+      returnType = requireRegisteredType(returnType, 'emval::as');
+      var destructors = [];
+      var rd = Emval.toHandle(destructors);
+      HEAP32[destructorsRef >> 2] = rd;
+      return returnType['toWireType'](destructors, handle);
+    }
+
+  function __emval_allocateDestructors(destructorsRef) {
+      var destructors = [];
+      HEAP32[destructorsRef >> 2] = Emval.toHandle(destructors);
+      return destructors;
+    }
+  
+  var emval_symbols = {};
+  function getStringOrSymbol(address) {
+      var symbol = emval_symbols[address];
+      if (symbol === undefined) {
+        return readLatin1String(address);
+      }
+      return symbol;
+    }
+  
+  var emval_methodCallers = [];
+  function __emval_call_method(caller, handle, methodName, destructorsRef, args) {
+      caller = emval_methodCallers[caller];
+      handle = Emval.toValue(handle);
+      methodName = getStringOrSymbol(methodName);
+      return caller(handle, methodName, __emval_allocateDestructors(destructorsRef), args);
+    }
+
+  function __emval_call_void_method(caller, handle, methodName, args) {
+      caller = emval_methodCallers[caller];
+      handle = Emval.toValue(handle);
+      methodName = getStringOrSymbol(methodName);
+      caller(handle, methodName, null, args);
+    }
+
+
+  function emval_get_global() {
+      if (typeof globalThis == 'object') {
+        return globalThis;
+      }
+      return (function(){
+        return Function;
+      })()('return this')();
+    }
+  function __emval_get_global(name) {
+      if (name===0) {
+        return Emval.toHandle(emval_get_global());
+      } else {
+        name = getStringOrSymbol(name);
+        return Emval.toHandle(emval_get_global()[name]);
+      }
+    }
+
+  function __emval_addMethodCaller(caller) {
+      var id = emval_methodCallers.length;
+      emval_methodCallers.push(caller);
+      return id;
+    }
+  
+  function __emval_lookupTypes(argCount, argTypes) {
+      var a = new Array(argCount);
+      for (var i = 0; i < argCount; ++i) {
+        a[i] = requireRegisteredType(HEAP32[(argTypes >> 2) + i],
+                                     "parameter " + i);
+      }
+      return a;
+    }
+  
+  var emval_registeredMethods = [];
+  function __emval_get_method_caller(argCount, argTypes) {
+      var types = __emval_lookupTypes(argCount, argTypes);
+      var retType = types[0];
+      var signatureName = retType.name + "_$" + types.slice(1).map(function (t) { return t.name; }).join("_") + "$";
+      var returnId = emval_registeredMethods[signatureName];
+      if (returnId !== undefined) {
+        return returnId;
+      }
+  
+      var params = ["retType"];
+      var args = [retType];
+  
+      var argsList = ""; // 'arg0, arg1, arg2, ... , argN'
+      for (var i = 0; i < argCount - 1; ++i) {
+        argsList += (i !== 0 ? ", " : "") + "arg" + i;
+        params.push("argType" + i);
+        args.push(types[1 + i]);
+      }
+  
+      var functionName = makeLegalFunctionName("methodCaller_" + signatureName);
+      var functionBody =
+          "return function " + functionName + "(handle, name, destructors, args) {\n";
+  
+      var offset = 0;
+      for (var i = 0; i < argCount - 1; ++i) {
+          functionBody +=
+          "    var arg" + i + " = argType" + i + ".readValueFromPointer(args" + (offset ? ("+"+offset) : "") + ");\n";
+          offset += types[i + 1]['argPackAdvance'];
+      }
+      functionBody +=
+          "    var rv = handle[name](" + argsList + ");\n";
+      for (var i = 0; i < argCount - 1; ++i) {
+          if (types[i + 1]['deleteObject']) {
+              functionBody +=
+              "    argType" + i + ".deleteObject(arg" + i + ");\n";
+          }
+      }
+      if (!retType.isVoid) {
+          functionBody +=
+          "    return retType.toWireType(destructors, rv);\n";
+      }
+      functionBody +=
+          "};\n";
+  
+      params.push(functionBody);
+      var invokerFunction = new_(Function, params).apply(null, args);
+      returnId = __emval_addMethodCaller(invokerFunction);
+      emval_registeredMethods[signatureName] = returnId;
+      return returnId;
+    }
+
+  function __emval_get_module_property(name) {
+      name = getStringOrSymbol(name);
+      return Emval.toHandle(Module[name]);
+    }
+
+  function __emval_get_property(handle, key) {
+      handle = Emval.toValue(handle);
+      key = Emval.toValue(key);
+      return Emval.toHandle(handle[key]);
+    }
+
+  function __emval_incref(handle) {
+      if (handle > 4) {
+        emval_handle_array[handle].refcount += 1;
+      }
+    }
+
+  function craftEmvalAllocator(argCount) {
+      /*This function returns a new function that looks like this:
+      function emval_allocator_3(constructor, argTypes, args) {
+          var argType0 = requireRegisteredType(HEAP32[(argTypes >> 2)], "parameter 0");
+          var arg0 = argType0['readValueFromPointer'](args);
+          var argType1 = requireRegisteredType(HEAP32[(argTypes >> 2) + 1], "parameter 1");
+          var arg1 = argType1['readValueFromPointer'](args + 8);
+          var argType2 = requireRegisteredType(HEAP32[(argTypes >> 2) + 2], "parameter 2");
+          var arg2 = argType2['readValueFromPointer'](args + 16);
+          var obj = new constructor(arg0, arg1, arg2);
+          return Emval.toHandle(obj);
+      } */
+      var argsList = "";
+      for (var i = 0; i < argCount; ++i) {
+        argsList += (i!==0?", ":"")+"arg"+i; // 'arg0, arg1, ..., argn'
+      }
+  
+      var functionBody =
+          "return function emval_allocator_"+argCount+"(constructor, argTypes, args) {\n";
+  
+      for (var i = 0; i < argCount; ++i) {
+          functionBody +=
+              "var argType"+i+" = requireRegisteredType(Module['HEAP32'][(argTypes >>> 2) + "+i+"], \"parameter "+i+"\");\n" +
+              "var arg"+i+" = argType"+i+".readValueFromPointer(args);\n" +
+              "args += argType"+i+"['argPackAdvance'];\n";
+      }
+      functionBody +=
+          "var obj = new constructor("+argsList+");\n" +
+          "return valueToHandle(obj);\n" +
+          "}\n";
+  
+      /*jshint evil:true*/
+      return (new Function("requireRegisteredType", "Module", "valueToHandle", functionBody))(
+          requireRegisteredType, Module, Emval.toHandle);
+    }
+  
+  var emval_newers = {};
+  function __emval_new(handle, argCount, argTypes, args) {
+      handle = Emval.toValue(handle);
+  
+      var newer = emval_newers[argCount];
+      if (!newer) {
+        newer = craftEmvalAllocator(argCount);
+        emval_newers[argCount] = newer;
+      }
+  
+      return newer(handle, argTypes, args);
+    }
+
+  function __emval_new_cstring(v) {
+      return Emval.toHandle(getStringOrSymbol(v));
+    }
+
+  function __emval_run_destructors(handle) {
+      var destructors = Emval.toValue(handle);
+      runDestructors(destructors);
+      __emval_decref(handle);
+    }
+
+  function __emval_set_property(handle, key, value) {
+      handle = Emval.toValue(handle);
+      key = Emval.toValue(key);
+      value = Emval.toValue(value);
+      handle[key] = value;
+    }
+
+  function __emval_take_value(type, argv) {
+      type = requireRegisteredType(type, '_emval_take_value');
+      var v = type['readValueFromPointer'](argv);
+      return Emval.toHandle(v);
+    }
+
+  function __emval_typeof(handle) {
+      handle = Emval.toValue(handle);
+      return Emval.toHandle(typeof handle);
+    }
+
+  function _abort() {
+      abort('native code called abort()');
+    }
+
+  function _emscripten_memcpy_big(dest, src, num) {
+      HEAPU8.copyWithin(dest, src, src + num);
+    }
+
+  function getHeapMax() {
+      return HEAPU8.length;
+    }
+  
+  function abortOnCannotGrowMemory(requestedSize) {
+      abort('Cannot enlarge memory arrays to size ' + requestedSize + ' bytes (OOM). Either (1) compile with -sINITIAL_MEMORY=X with X higher than the current value ' + HEAP8.length + ', (2) compile with -sALLOW_MEMORY_GROWTH which allows increasing the size at runtime, or (3) if you want malloc to return NULL (0) instead of this abort, compile with -sABORTING_MALLOC=0');
+    }
+  function _emscripten_resize_heap(requestedSize) {
+      var oldSize = HEAPU8.length;
+      requestedSize = requestedSize >>> 0;
+      abortOnCannotGrowMemory(requestedSize);
+    }
+
+  /** @param {boolean=} synchronous */
+  function callUserCallback(func, synchronous) {
+      if (ABORT) {
+        err('user callback triggered after runtime exited or application aborted.  Ignoring.');
+        return;
+      }
+      // For synchronous calls, let any exceptions propagate, and don't let the runtime exit.
+      if (synchronous) {
+        func();
+        return;
+      }
+      try {
+        func();
+      } catch (e) {
+        handleException(e);
+      }
+    }
+  
+  function runtimeKeepalivePush() {
+    }
+  
+  function runtimeKeepalivePop() {
+    }
+  /** @param {number=} timeout */
+  function safeSetTimeout(func, timeout) {
+      
+      return setTimeout(function() {
+        
+        callUserCallback(func);
+      }, timeout);
+    }
+  var Browser = {mainLoop:{running:false,scheduler:null,method:"",currentlyRunningMainloop:0,func:null,arg:0,timingMode:0,timingValue:0,currentFrameNumber:0,queue:[],pause:function() {
+          Browser.mainLoop.scheduler = null;
+          // Incrementing this signals the previous main loop that it's now become old, and it must return.
+          Browser.mainLoop.currentlyRunningMainloop++;
+        },resume:function() {
+          Browser.mainLoop.currentlyRunningMainloop++;
+          var timingMode = Browser.mainLoop.timingMode;
+          var timingValue = Browser.mainLoop.timingValue;
+          var func = Browser.mainLoop.func;
+          Browser.mainLoop.func = null;
+          // do not set timing and call scheduler, we will do it on the next lines
+          setMainLoop(func, 0, false, Browser.mainLoop.arg, true);
+          _emscripten_set_main_loop_timing(timingMode, timingValue);
+          Browser.mainLoop.scheduler();
+        },updateStatus:function() {
+          if (Module['setStatus']) {
+            var message = Module['statusMessage'] || 'Please wait...';
+            var remaining = Browser.mainLoop.remainingBlockers;
+            var expected = Browser.mainLoop.expectedBlockers;
+            if (remaining) {
+              if (remaining < expected) {
+                Module['setStatus'](message + ' (' + (expected - remaining) + '/' + expected + ')');
+              } else {
+                Module['setStatus'](message);
+              }
+            } else {
+              Module['setStatus']('');
+            }
+          }
+        },runIter:function(func) {
+          if (ABORT) return;
+          if (Module['preMainLoop']) {
+            var preRet = Module['preMainLoop']();
+            if (preRet === false) {
+              return; // |return false| skips a frame
+            }
+          }
+          callUserCallback(func);
+          if (Module['postMainLoop']) Module['postMainLoop']();
+        }},isFullscreen:false,pointerLock:false,moduleContextCreatedCallbacks:[],workers:[],init:function() {
+        if (!Module["preloadPlugins"]) Module["preloadPlugins"] = []; // needs to exist even in workers
+  
+        if (Browser.initted) return;
+        Browser.initted = true;
+  
+        try {
+          new Blob();
+          Browser.hasBlobConstructor = true;
+        } catch(e) {
+          Browser.hasBlobConstructor = false;
+          out("warning: no blob constructor, cannot create blobs with mimetypes");
+        }
+        Browser.BlobBuilder = typeof MozBlobBuilder != "undefined" ? MozBlobBuilder : (typeof WebKitBlobBuilder != "undefined" ? WebKitBlobBuilder : (!Browser.hasBlobConstructor ? out("warning: no BlobBuilder") : null));
+        Browser.URLObject = typeof window != "undefined" ? (window.URL ? window.URL : window.webkitURL) : undefined;
+        if (!Module.noImageDecoding && typeof Browser.URLObject == 'undefined') {
+          out("warning: Browser does not support creating object URLs. Built-in browser image decoding will not be available.");
+          Module.noImageDecoding = true;
+        }
+  
+        // Support for plugins that can process preloaded files. You can add more of these to
+        // your app by creating and appending to Module.preloadPlugins.
+        //
+        // Each plugin is asked if it can handle a file based on the file's name. If it can,
+        // it is given the file's raw data. When it is done, it calls a callback with the file's
+        // (possibly modified) data. For example, a plugin might decompress a file, or it
+        // might create some side data structure for use later (like an Image element, etc.).
+  
+        var imagePlugin = {};
+        imagePlugin['canHandle'] = function imagePlugin_canHandle(name) {
+          return !Module.noImageDecoding && /\.(jpg|jpeg|png|bmp)$/i.test(name);
+        };
+        imagePlugin['handle'] = function imagePlugin_handle(byteArray, name, onload, onerror) {
+          var b = null;
+          if (Browser.hasBlobConstructor) {
+            try {
+              b = new Blob([byteArray], { type: Browser.getMimetype(name) });
+              if (b.size !== byteArray.length) { // Safari bug #118630
+                // Safari's Blob can only take an ArrayBuffer
+                b = new Blob([(new Uint8Array(byteArray)).buffer], { type: Browser.getMimetype(name) });
+              }
+            } catch(e) {
+              warnOnce('Blob constructor present but fails: ' + e + '; falling back to blob builder');
+            }
+          }
+          if (!b) {
+            var bb = new Browser.BlobBuilder();
+            bb.append((new Uint8Array(byteArray)).buffer); // we need to pass a buffer, and must copy the array to get the right data range
+            b = bb.getBlob();
+          }
+          var url = Browser.URLObject.createObjectURL(b);
+          assert(typeof url == 'string', 'createObjectURL must return a url as a string');
+          var img = new Image();
+          img.onload = () => {
+            assert(img.complete, 'Image ' + name + ' could not be decoded');
+            var canvas = /** @type {!HTMLCanvasElement} */ (document.createElement('canvas'));
+            canvas.width = img.width;
+            canvas.height = img.height;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+            preloadedImages[name] = canvas;
+            Browser.URLObject.revokeObjectURL(url);
+            if (onload) onload(byteArray);
+          };
+          img.onerror = (event) => {
+            out('Image ' + url + ' could not be decoded');
+            if (onerror) onerror();
+          };
+          img.src = url;
+        };
+        Module['preloadPlugins'].push(imagePlugin);
+  
+        var audioPlugin = {};
+        audioPlugin['canHandle'] = function audioPlugin_canHandle(name) {
+          return !Module.noAudioDecoding && name.substr(-4) in { '.ogg': 1, '.wav': 1, '.mp3': 1 };
+        };
+        audioPlugin['handle'] = function audioPlugin_handle(byteArray, name, onload, onerror) {
+          var done = false;
+          function finish(audio) {
+            if (done) return;
+            done = true;
+            preloadedAudios[name] = audio;
+            if (onload) onload(byteArray);
+          }
+          function fail() {
+            if (done) return;
+            done = true;
+            preloadedAudios[name] = new Audio(); // empty shim
+            if (onerror) onerror();
+          }
+          if (Browser.hasBlobConstructor) {
+            try {
+              var b = new Blob([byteArray], { type: Browser.getMimetype(name) });
+            } catch(e) {
+              return fail();
+            }
+            var url = Browser.URLObject.createObjectURL(b); // XXX we never revoke this!
+            assert(typeof url == 'string', 'createObjectURL must return a url as a string');
+            var audio = new Audio();
+            audio.addEventListener('canplaythrough', function() { finish(audio) }, false); // use addEventListener due to chromium bug 124926
+            audio.onerror = function audio_onerror(event) {
+              if (done) return;
+              out('warning: browser could not fully decode audio ' + name + ', trying slower base64 approach');
+              function encode64(data) {
+                var BASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+                var PAD = '=';
+                var ret = '';
+                var leftchar = 0;
+                var leftbits = 0;
+                for (var i = 0; i < data.length; i++) {
+                  leftchar = (leftchar << 8) | data[i];
+                  leftbits += 8;
+                  while (leftbits >= 6) {
+                    var curr = (leftchar >> (leftbits-6)) & 0x3f;
+                    leftbits -= 6;
+                    ret += BASE[curr];
+                  }
+                }
+                if (leftbits == 2) {
+                  ret += BASE[(leftchar&3) << 4];
+                  ret += PAD + PAD;
+                } else if (leftbits == 4) {
+                  ret += BASE[(leftchar&0xf) << 2];
+                  ret += PAD;
+                }
+                return ret;
+              }
+              audio.src = 'data:audio/x-' + name.substr(-3) + ';base64,' + encode64(byteArray);
+              finish(audio); // we don't wait for confirmation this worked - but it's worth trying
+            };
+            audio.src = url;
+            // workaround for chrome bug 124926 - we do not always get oncanplaythrough or onerror
+            safeSetTimeout(function() {
+              finish(audio); // try to use it even though it is not necessarily ready to play
+            }, 10000);
+          } else {
+            return fail();
+          }
+        };
+        Module['preloadPlugins'].push(audioPlugin);
+  
+        // Canvas event setup
+  
+        function pointerLockChange() {
+          Browser.pointerLock = document['pointerLockElement'] === Module['canvas'] ||
+                                document['mozPointerLockElement'] === Module['canvas'] ||
+                                document['webkitPointerLockElement'] === Module['canvas'] ||
+                                document['msPointerLockElement'] === Module['canvas'];
+        }
+        var canvas = Module['canvas'];
+        if (canvas) {
+          // forced aspect ratio can be enabled by defining 'forcedAspectRatio' on Module
+          // Module['forcedAspectRatio'] = 4 / 3;
+  
+          canvas.requestPointerLock = canvas['requestPointerLock'] ||
+                                      canvas['mozRequestPointerLock'] ||
+                                      canvas['webkitRequestPointerLock'] ||
+                                      canvas['msRequestPointerLock'] ||
+                                      function(){};
+          canvas.exitPointerLock = document['exitPointerLock'] ||
+                                   document['mozExitPointerLock'] ||
+                                   document['webkitExitPointerLock'] ||
+                                   document['msExitPointerLock'] ||
+                                   function(){}; // no-op if function does not exist
+          canvas.exitPointerLock = canvas.exitPointerLock.bind(document);
+  
+          document.addEventListener('pointerlockchange', pointerLockChange, false);
+          document.addEventListener('mozpointerlockchange', pointerLockChange, false);
+          document.addEventListener('webkitpointerlockchange', pointerLockChange, false);
+          document.addEventListener('mspointerlockchange', pointerLockChange, false);
+  
+          if (Module['elementPointerLock']) {
+            canvas.addEventListener("click", function(ev) {
+              if (!Browser.pointerLock && Module['canvas'].requestPointerLock) {
+                Module['canvas'].requestPointerLock();
+                ev.preventDefault();
+              }
+            }, false);
+          }
+        }
+      },handledByPreloadPlugin:function(byteArray, fullname, finish, onerror) {
+        // Ensure plugins are ready.
+        Browser.init();
+  
+        var handled = false;
+        Module['preloadPlugins'].forEach(function(plugin) {
+          if (handled) return;
+          if (plugin['canHandle'](fullname)) {
+            plugin['handle'](byteArray, fullname, finish, onerror);
+            handled = true;
+          }
+        });
+        return handled;
+      },createContext:function(/** @type {HTMLCanvasElement} */ canvas, useWebGL, setInModule, webGLContextAttributes) {
+        if (useWebGL && Module.ctx && canvas == Module.canvas) return Module.ctx; // no need to recreate GL context if it's already been created for this canvas.
+  
+        var ctx;
+        var contextHandle;
+        if (useWebGL) {
+          // For GLES2/desktop GL compatibility, adjust a few defaults to be different to WebGL defaults, so that they align better with the desktop defaults.
+          var contextAttributes = {
+            antialias: false,
+            alpha: false,
+            majorVersion: 1,
+          };
+  
+          if (webGLContextAttributes) {
+            for (var attribute in webGLContextAttributes) {
+              contextAttributes[attribute] = webGLContextAttributes[attribute];
+            }
+          }
+  
+          // This check of existence of GL is here to satisfy Closure compiler, which yells if variable GL is referenced below but GL object is not
+          // actually compiled in because application is not doing any GL operations. TODO: Ideally if GL is not being used, this function
+          // Browser.createContext() should not even be emitted.
+          if (typeof GL != 'undefined') {
+            contextHandle = GL.createContext(canvas, contextAttributes);
+            if (contextHandle) {
+              ctx = GL.getContext(contextHandle).GLctx;
+            }
+          }
+        } else {
+          ctx = canvas.getContext('2d');
+        }
+  
+        if (!ctx) return null;
+  
+        if (setInModule) {
+          if (!useWebGL) assert(typeof GLctx == 'undefined', 'cannot set in module if GLctx is used, but we are a non-GL context that would replace it');
+  
+          Module.ctx = ctx;
+          if (useWebGL) GL.makeContextCurrent(contextHandle);
+          Module.useWebGL = useWebGL;
+          Browser.moduleContextCreatedCallbacks.forEach(function(callback) { callback() });
+          Browser.init();
+        }
+        return ctx;
+      },destroyContext:function(canvas, useWebGL, setInModule) {},fullscreenHandlersInstalled:false,lockPointer:undefined,resizeCanvas:undefined,requestFullscreen:function(lockPointer, resizeCanvas) {
+        Browser.lockPointer = lockPointer;
+        Browser.resizeCanvas = resizeCanvas;
+        if (typeof Browser.lockPointer == 'undefined') Browser.lockPointer = true;
+        if (typeof Browser.resizeCanvas == 'undefined') Browser.resizeCanvas = false;
+  
+        var canvas = Module['canvas'];
+        function fullscreenChange() {
+          Browser.isFullscreen = false;
+          var canvasContainer = canvas.parentNode;
+          if ((document['fullscreenElement'] || document['mozFullScreenElement'] ||
+               document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
+               document['webkitCurrentFullScreenElement']) === canvasContainer) {
+            canvas.exitFullscreen = Browser.exitFullscreen;
+            if (Browser.lockPointer) canvas.requestPointerLock();
+            Browser.isFullscreen = true;
+            if (Browser.resizeCanvas) {
+              Browser.setFullscreenCanvasSize();
+            } else {
+              Browser.updateCanvasDimensions(canvas);
+            }
+          } else {
+            // remove the full screen specific parent of the canvas again to restore the HTML structure from before going full screen
+            canvasContainer.parentNode.insertBefore(canvas, canvasContainer);
+            canvasContainer.parentNode.removeChild(canvasContainer);
+  
+            if (Browser.resizeCanvas) {
+              Browser.setWindowedCanvasSize();
+            } else {
+              Browser.updateCanvasDimensions(canvas);
+            }
+          }
+          if (Module['onFullScreen']) Module['onFullScreen'](Browser.isFullscreen);
+          if (Module['onFullscreen']) Module['onFullscreen'](Browser.isFullscreen);
+        }
+  
+        if (!Browser.fullscreenHandlersInstalled) {
+          Browser.fullscreenHandlersInstalled = true;
+          document.addEventListener('fullscreenchange', fullscreenChange, false);
+          document.addEventListener('mozfullscreenchange', fullscreenChange, false);
+          document.addEventListener('webkitfullscreenchange', fullscreenChange, false);
+          document.addEventListener('MSFullscreenChange', fullscreenChange, false);
+        }
+  
+        // create a new parent to ensure the canvas has no siblings. this allows browsers to optimize full screen performance when its parent is the full screen root
+        var canvasContainer = document.createElement("div");
+        canvas.parentNode.insertBefore(canvasContainer, canvas);
+        canvasContainer.appendChild(canvas);
+  
+        // use parent of canvas as full screen root to allow aspect ratio correction (Firefox stretches the root to screen size)
+        canvasContainer.requestFullscreen = canvasContainer['requestFullscreen'] ||
+                                            canvasContainer['mozRequestFullScreen'] ||
+                                            canvasContainer['msRequestFullscreen'] ||
+                                           (canvasContainer['webkitRequestFullscreen'] ? function() { canvasContainer['webkitRequestFullscreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null) ||
+                                           (canvasContainer['webkitRequestFullScreen'] ? function() { canvasContainer['webkitRequestFullScreen'](Element['ALLOW_KEYBOARD_INPUT']) } : null);
+  
+        canvasContainer.requestFullscreen();
+      },requestFullScreen:function() {
+        abort('Module.requestFullScreen has been replaced by Module.requestFullscreen (without a capital S)');
+      },exitFullscreen:function() {
+        // This is workaround for chrome. Trying to exit from fullscreen
+        // not in fullscreen state will cause "TypeError: Document not active"
+        // in chrome. See https://github.com/emscripten-core/emscripten/pull/8236
+        if (!Browser.isFullscreen) {
+          return false;
+        }
+  
+        var CFS = document['exitFullscreen'] ||
+                  document['cancelFullScreen'] ||
+                  document['mozCancelFullScreen'] ||
+                  document['msExitFullscreen'] ||
+                  document['webkitCancelFullScreen'] ||
+            (function() {});
+        CFS.apply(document, []);
+        return true;
+      },nextRAF:0,fakeRequestAnimationFrame:function(func) {
+        // try to keep 60fps between calls to here
+        var now = Date.now();
+        if (Browser.nextRAF === 0) {
+          Browser.nextRAF = now + 1000/60;
+        } else {
+          while (now + 2 >= Browser.nextRAF) { // fudge a little, to avoid timer jitter causing us to do lots of delay:0
+            Browser.nextRAF += 1000/60;
+          }
+        }
+        var delay = Math.max(Browser.nextRAF - now, 0);
+        setTimeout(func, delay);
+      },requestAnimationFrame:function(func) {
+        if (typeof requestAnimationFrame == 'function') {
+          requestAnimationFrame(func);
+          return;
+        }
+        var RAF = Browser.fakeRequestAnimationFrame;
+        RAF(func);
+      },safeSetTimeout:function(func) {
+        // Legacy function, this is used by the SDL2 port so we need to keep it
+        // around at least until that is updated.
+        return safeSetTimeout(func);
+      },safeRequestAnimationFrame:function(func) {
+        
+        return Browser.requestAnimationFrame(function() {
+          
+          callUserCallback(func);
+        });
+      },getMimetype:function(name) {
+        return {
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'png': 'image/png',
+          'bmp': 'image/bmp',
+          'ogg': 'audio/ogg',
+          'wav': 'audio/wav',
+          'mp3': 'audio/mpeg'
+        }[name.substr(name.lastIndexOf('.')+1)];
+      },getUserMedia:function(func) {
+        if (!window.getUserMedia) {
+          window.getUserMedia = navigator['getUserMedia'] ||
+                                navigator['mozGetUserMedia'];
+        }
+        window.getUserMedia(func);
+      },getMovementX:function(event) {
+        return event['movementX'] ||
+               event['mozMovementX'] ||
+               event['webkitMovementX'] ||
+               0;
+      },getMovementY:function(event) {
+        return event['movementY'] ||
+               event['mozMovementY'] ||
+               event['webkitMovementY'] ||
+               0;
+      },getMouseWheelDelta:function(event) {
+        var delta = 0;
+        switch (event.type) {
+          case 'DOMMouseScroll':
+            // 3 lines make up a step
+            delta = event.detail / 3;
+            break;
+          case 'mousewheel':
+            // 120 units make up a step
+            delta = event.wheelDelta / 120;
+            break;
+          case 'wheel':
+            delta = event.deltaY
+            switch (event.deltaMode) {
+              case 0:
+                // DOM_DELTA_PIXEL: 100 pixels make up a step
+                delta /= 100;
+                break;
+              case 1:
+                // DOM_DELTA_LINE: 3 lines make up a step
+                delta /= 3;
+                break;
+              case 2:
+                // DOM_DELTA_PAGE: A page makes up 80 steps
+                delta *= 80;
+                break;
+              default:
+                throw 'unrecognized mouse wheel delta mode: ' + event.deltaMode;
+            }
+            break;
+          default:
+            throw 'unrecognized mouse wheel event: ' + event.type;
+        }
+        return delta;
+      },mouseX:0,mouseY:0,mouseMovementX:0,mouseMovementY:0,touches:{},lastTouches:{},calculateMouseEvent:function(event) { // event should be mousemove, mousedown or mouseup
+        if (Browser.pointerLock) {
+          // When the pointer is locked, calculate the coordinates
+          // based on the movement of the mouse.
+          // Workaround for Firefox bug 764498
+          if (event.type != 'mousemove' &&
+              ('mozMovementX' in event)) {
+            Browser.mouseMovementX = Browser.mouseMovementY = 0;
+          } else {
+            Browser.mouseMovementX = Browser.getMovementX(event);
+            Browser.mouseMovementY = Browser.getMovementY(event);
+          }
+  
+          // check if SDL is available
+          if (typeof SDL != "undefined") {
+            Browser.mouseX = SDL.mouseX + Browser.mouseMovementX;
+            Browser.mouseY = SDL.mouseY + Browser.mouseMovementY;
+          } else {
+            // just add the mouse delta to the current absolut mouse position
+            // FIXME: ideally this should be clamped against the canvas size and zero
+            Browser.mouseX += Browser.mouseMovementX;
+            Browser.mouseY += Browser.mouseMovementY;
+          }
+        } else {
+          // Otherwise, calculate the movement based on the changes
+          // in the coordinates.
+          var rect = Module["canvas"].getBoundingClientRect();
+          var cw = Module["canvas"].width;
+          var ch = Module["canvas"].height;
+  
+          // Neither .scrollX or .pageXOffset are defined in a spec, but
+          // we prefer .scrollX because it is currently in a spec draft.
+          // (see: http://www.w3.org/TR/2013/WD-cssom-view-20131217/)
+          var scrollX = ((typeof window.scrollX != 'undefined') ? window.scrollX : window.pageXOffset);
+          var scrollY = ((typeof window.scrollY != 'undefined') ? window.scrollY : window.pageYOffset);
+          // If this assert lands, it's likely because the browser doesn't support scrollX or pageXOffset
+          // and we have no viable fallback.
+          assert((typeof scrollX != 'undefined') && (typeof scrollY != 'undefined'), 'Unable to retrieve scroll position, mouse positions likely broken.');
+  
+          if (event.type === 'touchstart' || event.type === 'touchend' || event.type === 'touchmove') {
+            var touch = event.touch;
+            if (touch === undefined) {
+              return; // the "touch" property is only defined in SDL
+  
+            }
+            var adjustedX = touch.pageX - (scrollX + rect.left);
+            var adjustedY = touch.pageY - (scrollY + rect.top);
+  
+            adjustedX = adjustedX * (cw / rect.width);
+            adjustedY = adjustedY * (ch / rect.height);
+  
+            var coords = { x: adjustedX, y: adjustedY };
+  
+            if (event.type === 'touchstart') {
+              Browser.lastTouches[touch.identifier] = coords;
+              Browser.touches[touch.identifier] = coords;
+            } else if (event.type === 'touchend' || event.type === 'touchmove') {
+              var last = Browser.touches[touch.identifier];
+              if (!last) last = coords;
+              Browser.lastTouches[touch.identifier] = last;
+              Browser.touches[touch.identifier] = coords;
+            }
+            return;
+          }
+  
+          var x = event.pageX - (scrollX + rect.left);
+          var y = event.pageY - (scrollY + rect.top);
+  
+          // the canvas might be CSS-scaled compared to its backbuffer;
+          // SDL-using content will want mouse coordinates in terms
+          // of backbuffer units.
+          x = x * (cw / rect.width);
+          y = y * (ch / rect.height);
+  
+          Browser.mouseMovementX = x - Browser.mouseX;
+          Browser.mouseMovementY = y - Browser.mouseY;
+          Browser.mouseX = x;
+          Browser.mouseY = y;
+        }
+      },resizeListeners:[],updateResizeListeners:function() {
+        var canvas = Module['canvas'];
+        Browser.resizeListeners.forEach(function(listener) {
+          listener(canvas.width, canvas.height);
+        });
+      },setCanvasSize:function(width, height, noUpdates) {
+        var canvas = Module['canvas'];
+        Browser.updateCanvasDimensions(canvas, width, height);
+        if (!noUpdates) Browser.updateResizeListeners();
+      },windowedWidth:0,windowedHeight:0,setFullscreenCanvasSize:function() {
+        // check if SDL is available
+        if (typeof SDL != "undefined") {
+          var flags = HEAPU32[((SDL.screen)>>2)];
+          flags = flags | 0x00800000; // set SDL_FULLSCREEN flag
+          HEAP32[((SDL.screen)>>2)] = flags;
+        }
+        Browser.updateCanvasDimensions(Module['canvas']);
+        Browser.updateResizeListeners();
+      },setWindowedCanvasSize:function() {
+        // check if SDL is available
+        if (typeof SDL != "undefined") {
+          var flags = HEAPU32[((SDL.screen)>>2)];
+          flags = flags & ~0x00800000; // clear SDL_FULLSCREEN flag
+          HEAP32[((SDL.screen)>>2)] = flags;
+        }
+        Browser.updateCanvasDimensions(Module['canvas']);
+        Browser.updateResizeListeners();
+      },updateCanvasDimensions:function(canvas, wNative, hNative) {
+        if (wNative && hNative) {
+          canvas.widthNative = wNative;
+          canvas.heightNative = hNative;
+        } else {
+          wNative = canvas.widthNative;
+          hNative = canvas.heightNative;
+        }
+        var w = wNative;
+        var h = hNative;
+        if (Module['forcedAspectRatio'] && Module['forcedAspectRatio'] > 0) {
+          if (w/h < Module['forcedAspectRatio']) {
+            w = Math.round(h * Module['forcedAspectRatio']);
+          } else {
+            h = Math.round(w / Module['forcedAspectRatio']);
+          }
+        }
+        if (((document['fullscreenElement'] || document['mozFullScreenElement'] ||
+             document['msFullscreenElement'] || document['webkitFullscreenElement'] ||
+             document['webkitCurrentFullScreenElement']) === canvas.parentNode) && (typeof screen != 'undefined')) {
+           var factor = Math.min(screen.width / w, screen.height / h);
+           w = Math.round(w * factor);
+           h = Math.round(h * factor);
+        }
+        if (Browser.resizeCanvas) {
+          if (canvas.width  != w) canvas.width  = w;
+          if (canvas.height != h) canvas.height = h;
+          if (typeof canvas.style != 'undefined') {
+            canvas.style.removeProperty( "width");
+            canvas.style.removeProperty("height");
+          }
+        } else {
+          if (canvas.width  != wNative) canvas.width  = wNative;
+          if (canvas.height != hNative) canvas.height = hNative;
+          if (typeof canvas.style != 'undefined') {
+            if (w != wNative || h != hNative) {
+              canvas.style.setProperty( "width", w + "px", "important");
+              canvas.style.setProperty("height", h + "px", "important");
+            } else {
+              canvas.style.removeProperty( "width");
+              canvas.style.removeProperty("height");
+            }
+          }
+        }
+      }};
+  function _emscripten_set_main_loop_timing(mode, value) {
+      Browser.mainLoop.timingMode = mode;
+      Browser.mainLoop.timingValue = value;
+  
+      if (!Browser.mainLoop.func) {
+        err('emscripten_set_main_loop_timing: Cannot set timing mode for main loop since a main loop does not exist! Call emscripten_set_main_loop first to set one up.');
+        return 1; // Return non-zero on failure, can't set timing mode when there is no main loop.
+      }
+  
+      if (!Browser.mainLoop.running) {
+        
+        Browser.mainLoop.running = true;
+      }
+      if (mode == 0 /*EM_TIMING_SETTIMEOUT*/) {
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setTimeout() {
+          var timeUntilNextTick = Math.max(0, Browser.mainLoop.tickStartTime + value - _emscripten_get_now())|0;
+          setTimeout(Browser.mainLoop.runner, timeUntilNextTick); // doing this each time means that on exception, we stop
+        };
+        Browser.mainLoop.method = 'timeout';
+      } else if (mode == 1 /*EM_TIMING_RAF*/) {
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_rAF() {
+          Browser.requestAnimationFrame(Browser.mainLoop.runner);
+        };
+        Browser.mainLoop.method = 'rAF';
+      } else if (mode == 2 /*EM_TIMING_SETIMMEDIATE*/) {
+        if (typeof setImmediate == 'undefined') {
+          // Emulate setImmediate. (note: not a complete polyfill, we don't emulate clearImmediate() to keep code size to minimum, since not needed)
+          var setImmediates = [];
+          var emscriptenMainLoopMessageId = 'setimmediate';
+          var Browser_setImmediate_messageHandler = function(/** @type {Event} */ event) {
+            // When called in current thread or Worker, the main loop ID is structured slightly different to accommodate for --proxy-to-worker runtime listening to Worker events,
+            // so check for both cases.
+            if (event.data === emscriptenMainLoopMessageId || event.data.target === emscriptenMainLoopMessageId) {
+              event.stopPropagation();
+              setImmediates.shift()();
+            }
+          }
+          addEventListener("message", Browser_setImmediate_messageHandler, true);
+          setImmediate = /** @type{function(function(): ?, ...?): number} */(function Browser_emulated_setImmediate(func) {
+            setImmediates.push(func);
+            if (ENVIRONMENT_IS_WORKER) {
+              if (Module['setImmediates'] === undefined) Module['setImmediates'] = [];
+              Module['setImmediates'].push(func);
+              postMessage({target: emscriptenMainLoopMessageId}); // In --proxy-to-worker, route the message via proxyClient.js
+            } else postMessage(emscriptenMainLoopMessageId, "*"); // On the main thread, can just send the message to itself.
+          })
+        }
+        Browser.mainLoop.scheduler = function Browser_mainLoop_scheduler_setImmediate() {
+          setImmediate(Browser.mainLoop.runner);
+        };
+        Browser.mainLoop.method = 'immediate';
+      }
+      return 0;
+    }
+  
+  var _emscripten_get_now;if (ENVIRONMENT_IS_NODE) {
+    _emscripten_get_now = () => {
+      var t = process['hrtime']();
+      return t[0] * 1e3 + t[1] / 1e6;
+    };
+  } else _emscripten_get_now = () => performance.now();
+  ;
+  
+  function _exit(status) {
+      // void _exit(int status);
+      // http://pubs.opengroup.org/onlinepubs/000095399/functions/exit.html
+      exit(status);
+    }
+  function maybeExit() {
+    }
+  
+    /**
+     * @param {number=} arg
+     * @param {boolean=} noSetTiming
+     */
+  function setMainLoop(browserIterationFunc, fps, simulateInfiniteLoop, arg, noSetTiming) {
+      assert(!Browser.mainLoop.func, 'emscripten_set_main_loop: there can only be one main loop function at once: call emscripten_cancel_main_loop to cancel the previous one before setting a new one with different parameters.');
+  
+      Browser.mainLoop.func = browserIterationFunc;
+      Browser.mainLoop.arg = arg;
+  
+      var thisMainLoopId = Browser.mainLoop.currentlyRunningMainloop;
+      function checkIsRunning() {
+        if (thisMainLoopId < Browser.mainLoop.currentlyRunningMainloop) {
+          
+          maybeExit();
+          return false;
+        }
+        return true;
+      }
+  
+      // We create the loop runner here but it is not actually running until
+      // _emscripten_set_main_loop_timing is called (which might happen a
+      // later time).  This member signifies that the current runner has not
+      // yet been started so that we can call runtimeKeepalivePush when it
+      // gets it timing set for the first time.
+      Browser.mainLoop.running = false;
+      Browser.mainLoop.runner = function Browser_mainLoop_runner() {
+        if (ABORT) return;
+        if (Browser.mainLoop.queue.length > 0) {
+          var start = Date.now();
+          var blocker = Browser.mainLoop.queue.shift();
+          blocker.func(blocker.arg);
+          if (Browser.mainLoop.remainingBlockers) {
+            var remaining = Browser.mainLoop.remainingBlockers;
+            var next = remaining%1 == 0 ? remaining-1 : Math.floor(remaining);
+            if (blocker.counted) {
+              Browser.mainLoop.remainingBlockers = next;
+            } else {
+              // not counted, but move the progress along a tiny bit
+              next = next + 0.5; // do not steal all the next one's progress
+              Browser.mainLoop.remainingBlockers = (8*remaining + next)/9;
+            }
+          }
+          out('main loop blocker "' + blocker.name + '" took ' + (Date.now() - start) + ' ms'); //, left: ' + Browser.mainLoop.remainingBlockers);
+          Browser.mainLoop.updateStatus();
+  
+          // catches pause/resume main loop from blocker execution
+          if (!checkIsRunning()) return;
+  
+          setTimeout(Browser.mainLoop.runner, 0);
+          return;
+        }
+  
+        // catch pauses from non-main loop sources
+        if (!checkIsRunning()) return;
+  
+        // Implement very basic swap interval control
+        Browser.mainLoop.currentFrameNumber = Browser.mainLoop.currentFrameNumber + 1 | 0;
+        if (Browser.mainLoop.timingMode == 1/*EM_TIMING_RAF*/ && Browser.mainLoop.timingValue > 1 && Browser.mainLoop.currentFrameNumber % Browser.mainLoop.timingValue != 0) {
+          // Not the scheduled time to render this frame - skip.
+          Browser.mainLoop.scheduler();
+          return;
+        } else if (Browser.mainLoop.timingMode == 0/*EM_TIMING_SETTIMEOUT*/) {
+          Browser.mainLoop.tickStartTime = _emscripten_get_now();
+        }
+  
+        // Signal GL rendering layer that processing of a new frame is about to start. This helps it optimize
+        // VBO double-buffering and reduce GPU stalls.
+  
+        if (Browser.mainLoop.method === 'timeout' && Module.ctx) {
+          warnOnce('Looks like you are rendering without using requestAnimationFrame for the main loop. You should use 0 for the frame rate in emscripten_set_main_loop in order to use requestAnimationFrame, as that can greatly improve your frame rates!');
+          Browser.mainLoop.method = ''; // just warn once per call to set main loop
+        }
+  
+        Browser.mainLoop.runIter(browserIterationFunc);
+  
+        checkStackCookie();
+  
+        // catch pauses from the main loop itself
+        if (!checkIsRunning()) return;
+  
+        // Queue new audio data. This is important to be right after the main loop invocation, so that we will immediately be able
+        // to queue the newest produced audio samples.
+        // TODO: Consider adding pre- and post- rAF callbacks so that GL.newRenderingFrameStarted() and SDL.audio.queueNewAudioData()
+        //       do not need to be hardcoded into this function, but can be more generic.
+        if (typeof SDL == 'object' && SDL.audio && SDL.audio.queueNewAudioData) SDL.audio.queueNewAudioData();
+  
+        Browser.mainLoop.scheduler();
+      }
+  
+      if (!noSetTiming) {
+        if (fps && fps > 0) _emscripten_set_main_loop_timing(0/*EM_TIMING_SETTIMEOUT*/, 1000.0 / fps);
+        else _emscripten_set_main_loop_timing(1/*EM_TIMING_RAF*/, 1); // Do rAF by rendering each frame (no decimating)
+  
+        Browser.mainLoop.scheduler();
+      }
+  
+      if (simulateInfiniteLoop) {
+        throw 'unwind';
+      }
+    }
+  function _emscripten_set_main_loop(func, fps, simulateInfiniteLoop) {
+      var browserIterationFunc = getWasmTableEntry(func);
+      setMainLoop(browserIterationFunc, fps, simulateInfiniteLoop);
+    }
+
+  var ENV = {};
+  
+  function getExecutableName() {
+      return thisProgram || './this.program';
+    }
+  function getEnvStrings() {
+      if (!getEnvStrings.strings) {
+        // Default values.
+        // Browser language detection #8751
+        var lang = ((typeof navigator == 'object' && navigator.languages && navigator.languages[0]) || 'C').replace('-', '_') + '.UTF-8';
+        var env = {
+          'USER': 'web_user',
+          'LOGNAME': 'web_user',
+          'PATH': '/',
+          'PWD': '/',
+          'HOME': '/home/web_user',
+          'LANG': lang,
+          '_': getExecutableName()
+        };
+        // Apply the user-provided values, if any.
+        for (var x in ENV) {
+          // x is a key in ENV; if ENV[x] is undefined, that means it was
+          // explicitly set to be so. We allow user code to do that to
+          // force variables with default values to remain unset.
+          if (ENV[x] === undefined) delete env[x];
+          else env[x] = ENV[x];
+        }
+        var strings = [];
+        for (var x in env) {
+          strings.push(x + '=' + env[x]);
+        }
+        getEnvStrings.strings = strings;
+      }
+      return getEnvStrings.strings;
+    }
   function _environ_get(__environ, environ_buf) {
       var bufSize = 0;
       getEnvStrings().forEach(function(string, i) {
@@ -6708,22 +6721,6 @@ var ASM_CONSTS = {
   function _strftime_l(s, maxsize, format, tm) {
       return _strftime(s, maxsize, format, tm); // no locale support yet
     }
-embind_init_charCodes();
-BindingError = Module['BindingError'] = extendError(Error, 'BindingError');;
-InternalError = Module['InternalError'] = extendError(Error, 'InternalError');;
-init_emval();;
-UnboundTypeError = Module['UnboundTypeError'] = extendError(Error, 'UnboundTypeError');;
-Module["requestFullscreen"] = function Module_requestFullscreen(lockPointer, resizeCanvas) { Browser.requestFullscreen(lockPointer, resizeCanvas) };
-  Module["requestFullScreen"] = function Module_requestFullScreen() { Browser.requestFullScreen() };
-  Module["requestAnimationFrame"] = function Module_requestAnimationFrame(func) { Browser.requestAnimationFrame(func) };
-  Module["setCanvasSize"] = function Module_setCanvasSize(width, height, noUpdates) { Browser.setCanvasSize(width, height, noUpdates) };
-  Module["pauseMainLoop"] = function Module_pauseMainLoop() { Browser.mainLoop.pause() };
-  Module["resumeMainLoop"] = function Module_resumeMainLoop() { Browser.mainLoop.resume() };
-  Module["getUserMedia"] = function Module_getUserMedia() { Browser.getUserMedia() };
-  Module["createContext"] = function Module_createContext(canvas, useWebGL, setInModule, webGLContextAttributes) { return Browser.createContext(canvas, useWebGL, setInModule, webGLContextAttributes) };
-  var preloadedImages = {};
-  var preloadedAudios = {};
-  ;
 
   var FSNode = /** @constructor */ function(parent, name, mode, rdev) {
     if (!parent) {
@@ -6894,6 +6891,22 @@ ERRNO_CODES = {
       'EOWNERDEAD': 62,
       'ESTRPIPE': 135,
     };;
+embind_init_charCodes();
+BindingError = Module['BindingError'] = extendError(Error, 'BindingError');;
+InternalError = Module['InternalError'] = extendError(Error, 'InternalError');;
+init_emval();;
+UnboundTypeError = Module['UnboundTypeError'] = extendError(Error, 'UnboundTypeError');;
+Module["requestFullscreen"] = function Module_requestFullscreen(lockPointer, resizeCanvas) { Browser.requestFullscreen(lockPointer, resizeCanvas) };
+  Module["requestFullScreen"] = function Module_requestFullScreen() { Browser.requestFullScreen() };
+  Module["requestAnimationFrame"] = function Module_requestAnimationFrame(func) { Browser.requestAnimationFrame(func) };
+  Module["setCanvasSize"] = function Module_setCanvasSize(width, height, noUpdates) { Browser.setCanvasSize(width, height, noUpdates) };
+  Module["pauseMainLoop"] = function Module_pauseMainLoop() { Browser.mainLoop.pause() };
+  Module["resumeMainLoop"] = function Module_resumeMainLoop() { Browser.mainLoop.resume() };
+  Module["getUserMedia"] = function Module_getUserMedia() { Browser.getUserMedia() };
+  Module["createContext"] = function Module_createContext(canvas, useWebGL, setInModule, webGLContextAttributes) { return Browser.createContext(canvas, useWebGL, setInModule, webGLContextAttributes) };
+  var preloadedImages = {};
+  var preloadedAudios = {};
+  ;
 var ASSERTIONS = true;
 
 
@@ -6937,6 +6950,7 @@ var asmLibraryArg = {
   "__cxa_throw": ___cxa_throw,
   "__cxa_uncaught_exceptions": ___cxa_uncaught_exceptions,
   "__resumeException": ___resumeException,
+  "__syscall_openat": ___syscall_openat,
   "_embind_register_bigint": __embind_register_bigint,
   "_embind_register_bool": __embind_register_bool,
   "_embind_register_emval": __embind_register_emval,
@@ -6994,12 +7008,12 @@ var asmLibraryArg = {
   "invoke_iiiiiiiiiii": invoke_iiiiiiiiiii,
   "invoke_iiiiiiiiiiii": invoke_iiiiiiiiiiii,
   "invoke_iiiiiiiiiiiii": invoke_iiiiiiiiiiiii,
+  "invoke_iiji": invoke_iiji,
   "invoke_jiiii": invoke_jiiii,
   "invoke_v": invoke_v,
   "invoke_vi": invoke_vi,
   "invoke_vid": invoke_vid,
-  "invoke_vidd": invoke_vidd,
-  "invoke_vidddddii": invoke_vidddddii,
+  "invoke_viddddii": invoke_viddddii,
   "invoke_vii": invoke_vii,
   "invoke_viid": invoke_viid,
   "invoke_viii": invoke_viii,
@@ -7023,6 +7037,9 @@ var ___wasm_call_ctors = Module["___wasm_call_ctors"] = createExportWrapper("__w
 var _SelectPage = Module["_SelectPage"] = createExportWrapper("SelectPage");
 
 /** @type {function(...*):?} */
+var ___errno_location = Module["___errno_location"] = createExportWrapper("__errno_location");
+
+/** @type {function(...*):?} */
 var _malloc = Module["_malloc"] = createExportWrapper("malloc");
 
 /** @type {function(...*):?} */
@@ -7033,9 +7050,6 @@ var ___getTypeName = Module["___getTypeName"] = createExportWrapper("__getTypeNa
 
 /** @type {function(...*):?} */
 var ___embind_register_native_and_builtin_types = Module["___embind_register_native_and_builtin_types"] = createExportWrapper("__embind_register_native_and_builtin_types");
-
-/** @type {function(...*):?} */
-var ___errno_location = Module["___errno_location"] = createExportWrapper("__errno_location");
 
 /** @type {function(...*):?} */
 var _fflush = Module["_fflush"] = createExportWrapper("fflush");
@@ -7080,6 +7094,12 @@ var ___cxa_can_catch = Module["___cxa_can_catch"] = createExportWrapper("__cxa_c
 
 /** @type {function(...*):?} */
 var ___cxa_is_pointer_type = Module["___cxa_is_pointer_type"] = createExportWrapper("__cxa_is_pointer_type");
+
+/** @type {function(...*):?} */
+var dynCall_iiji = Module["dynCall_iiji"] = createExportWrapper("dynCall_iiji");
+
+/** @type {function(...*):?} */
+var dynCall_ji = Module["dynCall_ji"] = createExportWrapper("dynCall_ji");
 
 /** @type {function(...*):?} */
 var dynCall_jiji = Module["dynCall_jiji"] = createExportWrapper("dynCall_jiji");
@@ -7144,7 +7164,7 @@ function invoke_di(index,a1) {
   }
 }
 
-function invoke_iid(index,a1,a2) {
+function invoke_iii(index,a1,a2) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2);
@@ -7155,7 +7175,7 @@ function invoke_iid(index,a1,a2) {
   }
 }
 
-function invoke_iii(index,a1,a2) {
+function invoke_iid(index,a1,a2) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2);
@@ -7210,21 +7230,10 @@ function invoke_dd(index,a1) {
   }
 }
 
-function invoke_d(index) {
+function invoke_v(index) {
   var sp = stackSave();
   try {
-    return getWasmTableEntry(index)();
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vidddddii(index,a1,a2,a3,a4,a5,a6,a7,a8) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7,a8);
+    getWasmTableEntry(index)();
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7236,6 +7245,28 @@ function invoke_vii(index,a1,a2) {
   var sp = stackSave();
   try {
     getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_d(index) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)();
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_viddddii(index,a1,a2,a3,a4,a5,a6,a7) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2,a3,a4,a5,a6,a7);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7269,17 +7300,6 @@ function invoke_id(index,a1) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1);
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_v(index) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)();
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7335,17 +7355,6 @@ function invoke_dii(index,a1,a2) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vidd(index,a1,a2,a3) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2,a3);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7500,6 +7509,17 @@ function invoke_viid(index,a1,a2,a3) {
   var sp = stackSave();
   try {
     getWasmTableEntry(index)(a1,a2,a3);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiji(index,a1,a2,a3,a4) {
+  var sp = stackSave();
+  try {
+    return dynCall_iiji(index,a1,a2,a3,a4);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
