@@ -1821,25 +1821,9 @@ void RenderSidebar()
             PlayOrPauseSound(emscripten::val(""));
           }
           boost::uuids::uuid uuid;
-          if (uuids.size() >= 1) {
-            uuid = uuids[0];
-            std::vector<boost::uuids::uuid> temp = {uuid};
-            std::vector<boost::uuids::uuid> excess;
-            for (auto &oldUuid: uuids) {
-              if (oldUuid != uuid) {
-                excess.emplace_back(oldUuid);
-              }
-            }
-            audio::remove_rlcs(excess);
-            uuids = temp;
-            auto removal = audio::remove_rlcs(temp);
-            removal.at(uuid) = std::make_tuple(std::get<0>(removal.at(uuid)), tV, std::get<2>(removal.at(uuid)));
-            audio::add_rlcs(removal);
-          } else {
-            uuid = uuidGenerator();
-            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults = {{uuid, std::make_tuple(frequency, initialVolume, timeConstant)}};
-            audio::add_rlcs(defaults);
-          }
+          uuid = uuidGenerator();
+          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults = {{uuid, std::make_tuple(frequency, initialVolume, timeConstant)}};
+          audio::add_rlcs(defaults);
           inductance = stod(inductor["value"].as<std::string>());
           timeConstant = tV;
           StoreData(page);
@@ -1860,8 +1844,8 @@ void RenderSidebar()
         if (std::isinf(f)) {
           fr.set("value", emscripten::val("Infinity"));
         } else {
-          if (frequency < 20000 && frequency > 20) {
-            fr.set("value", emscripten::val(f));
+          fr.set("value", emscripten::val(f));
+          if (f < 20000 && f > 20) {
             if (frequency != f) {
               enableNextButton();
               capacitance = stod(capacitor["value"].as<std::string>());
