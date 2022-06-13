@@ -512,7 +512,7 @@ void ResizeCanvas(emscripten::val event)
   canvas.set("height", emscripten::val(window["innerHeight"].as<double>() - 80));
   ctx.set("textAlign", emscripten::val("center"));
   ctx.set("textBaseline", emscripten::val("middle"));
-  ctx.set("font", emscripten::val("20px Arial"));
+  ctx.set("font", emscripten::val("20px Calibri"));
 }
 
 // width: 60
@@ -963,7 +963,7 @@ void DrawFourierCircuit(emscripten::val ctx, bool highlightCapacitor, bool highl
     ctx.call<void>("beginPath");
     ctx.call<void>("arc", width*0.5, height*0.97, 2, 0, 2*pi);
     ctx.call<void>("fill");
-    ctx.set("font", emscripten::val("15px Arial"));
+    ctx.set("font", emscripten::val("15px Calibri"));
     ctx.call<void>("fillText", emscripten::val("(10 is probably good enough)"), width*0.5+110, height*0.95);
   }
 }
@@ -2238,7 +2238,7 @@ int main() {
   window.call<void>("addEventListener", emscripten::val("resize"), emscripten::val::module_property("ResizeCanvas"));
   ctx.set("textAlign", emscripten::val("center"));
   ctx.set("textBaseline", emscripten::val("middle"));
-  ctx.set("font", emscripten::val("20px Arial"));
+  ctx.set("font", emscripten::val("20px Calibri"));
   document.call<emscripten::val>("getElementById", emscripten::val("next")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("NextPage"));
   document.call<emscripten::val>("getElementById", emscripten::val("play")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("PlayOrPauseSound"));
   document.call<emscripten::val>("getElementById", emscripten::val("intro-button")).call<void>("addEventListener", emscripten::val("mouseup"), emscripten::val::module_property("CloseIntro"));
