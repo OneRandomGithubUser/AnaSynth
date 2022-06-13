@@ -1540,6 +1540,7 @@ void InitializePage(int i)
         disablePlayButton();
       }
       disableNextButton();
+      frequency = -1;
       break;
     }
     case (5):
@@ -1739,7 +1740,9 @@ void InitializePage(int i)
       addLabel(info, "fValue", "∴ f = ", "left-label");
       info.call<emscripten::val>("appendChild", fValue);
       addLabel(info, "fValue", "Hz");
-      enablePlayButton();
+      disablePlayButton();
+      playButtonEnabled = false;
+      frequency = -1;
       enableNextButton();
       break;
     }
@@ -1878,13 +1881,13 @@ void RenderSidebar()
           power.set("value", emscripten::val("Infinity"));
           volume.set("value", emscripten::val("Infinity"));
         } else {
+          power.set("value", emscripten::val(p));
+          volume.set("value", emscripten::val(
+                  audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55)));
           if (watts != p && audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55) > 30 && audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55) < 70) {
             if (audio::get_playing()) {
               PlayOrPauseSound(emscripten::val(""));
             }
-            power.set("value", emscripten::val(p));
-            volume.set("value", emscripten::val(
-                    audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55)));
             watts = p;
             initialVolume = p * audio::decibels_to_watts(efficiency, 1);
             volts = stod(voltage["value"].as<std::string>());
@@ -1994,12 +1997,21 @@ void RenderSidebar()
         fValue.set("value", f);
         static std::vector<double> previousVars;
         std::vector<double>vars = {f, watts, resistance, inductance};
+        frequency = f;
         if (previousVars != vars)
         {
+          if(!playButtonEnabled) {
+            enablePlayButton();
+            playButtonEnabled = true;
+          }
           std::vector<double>freqs = {f};
-          //audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
+          // audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
           // TODO: set vars
+          audio::remove_all_rlcs();
+          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{{uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
+          audio::add_rlcs(defaults);
           previousVars = vars;
+          StoreData(page);
         }
 
       
