@@ -13,6 +13,10 @@ sub {
     font-size: 70%;
 }
 
+sup {
+    font-size: 70%;
+}
+
 canvas {
     cursor: crosshair;
 }

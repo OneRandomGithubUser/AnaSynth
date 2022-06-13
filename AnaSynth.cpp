@@ -29,6 +29,9 @@ static int page;
 bool circuitCompleted = false;
 boost::uuids::random_generator uuidGenerator;
 std::vector<boost::uuids::uuid> uuids;
+static double resistance = 4, inductance, capacitance, frequency, watts, volts;
+static bool playButtonEnabled = false;
+static bool nextButtonEnabled = false;
 
 static const std::map<std::string, double> frequencyMap = {
   {"C4", 261.63},
@@ -45,6 +48,9 @@ static const std::map<std::string, double> frequencyMap = {
   {"B", 493.88},
   {"C5", 523.25}
 };
+
+static const double frequencyArray[13] = {261.63, 277.18, 293.66, 311.13, 329.63, 349.23, 369.99, 392.00, 415.30, 440.00, 466.16, 493.88, 523.25};
+
 
 void PlayOrPauseSound(emscripten::val event);
 
@@ -390,6 +396,24 @@ void InteractWithCanvas(emscripten::val event)
   // double pageX = event["pageX"].as<double>();
   // double pageY = event["pageY"].as<double>();
   // std::cout << eventName << " " << pageX << " " << pageY << "\n";
+}
+
+void InteractWithKeyboard(emscripten::val event)
+{
+  switch(page) {
+    case(11):
+    {
+      std::string eventName = event["type"].as<std::string>();
+      if(eventName == "keydown") {
+        if(event["keyCode"].as<int>() == 90) {
+          std::cout << "z" << std::endl;
+        }
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }
 
 void ResizeCanvas(emscripten::val event)
@@ -1038,6 +1062,9 @@ void RenderCanvas()
     case 10:
       DrawFourierCircuit(ctx, false, false, false, false);
       break;
+    case 11:
+
+      break;
     default:
       ctx.call<void>("beginPath");
       ctx.call<void>("arc", 200 + 100*sin(FRAME_COUNT/(12*pi)), 150 + 75*sin(FRAME_COUNT/(7.5*pi)), abs(50*sin(FRAME_COUNT/(18*pi))), 0, 2 * pi);
@@ -1070,6 +1097,20 @@ void addNextButton(emscripten::val sidebar)
 void enablePlayButton()
 {
   document.call<emscripten::val>("getElementById", emscripten::val("play")).set("disabled", emscripten::val(false));
+}
+
+void enablePlayButton(bool off)
+{
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).set("disabled", emscripten::val(false));
+  if(off) {
+    document.call<emscripten::val>("getElementById", emscripten::val("play")).set("title", emscripten::val(""));
+  }
+}
+
+void disablePlayButton(std::string title)
+{
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).set("disabled", emscripten::val(true));
+  document.call<emscripten::val>("getElementById", emscripten::val("play")).set("title", emscripten::val(title));
 }
 
 void disablePlayButton()
@@ -1130,6 +1171,13 @@ void addParagraph(emscripten::val sidebar, std::string s) {
   sidebar.call<void>("appendChild", p);
 }
 
+void addParagraph(emscripten::val sidebar, std::string s, std::string id) {
+  emscripten::val p = document.call<emscripten::val>("createElement", emscripten::val("p"));
+  p.set("innerHTML", s);
+  p.set("id", id);
+  sidebar.call<void>("appendChild", p);
+}
+
 void addBigParagraph(emscripten::val sidebar, std::string s) {
   emscripten::val p = document.call<emscripten::val>("createElement", emscripten::val("p"));
   p.set("innerHTML", s);
@@ -1155,7 +1203,7 @@ void addLabel(emscripten::val sidebar, std::string f, std::string s, std::string
 void addCapacitorLabelSet(emscripten::val info, emscripten::val cValue, std::string c, std::string number) {
   addLabel(info, c, "C<sub>" + number +"</sub> = ", "left-label");
   info.call<emscripten::val>("appendChild", cValue);
-  addLabel(info, c, "F");
+  addLabel(info, c, "nF");
 }
 
 void addSelectOctave(emscripten::val info, std::string id) {
@@ -1253,6 +1301,8 @@ void InitializePage(int i)
       emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
       emscripten::val rValue = addInputField("rValue", true, 0.1, 0);
       emscripten::val tValue = addInputField("tValue", true, 0.1, 0);
+      
+      lValue.set("value", inductance);
 
       addParagraph(info, "The time constant, &#120591, of this system is given by the equation");
       addBigParagraph(info, "&#120591 = 2L/R");
@@ -1286,6 +1336,7 @@ void InitializePage(int i)
         disablePlayButton();
       }
       disableNextButton();
+      nextButtonEnabled = false;
       break;
     }
     case (3):
@@ -1298,18 +1349,21 @@ void InitializePage(int i)
       break;
     case (4):
     {
-      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
-      emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
+      emscripten::val cValue = addInputField("cValue", false, 0.1, 0);
+      emscripten::val lValue = addInputField("lValue", true, 0.1, 0);
       emscripten::val fValue = addInputField("fValue", true, 0.1, 0);
 
+      lValue.set("value", emscripten::val(inductance));
+      cValue.set("value", emscripten::val(capacitance));
+
+      addLabel(info, "cValue", "C = ", "left-label");
+      info.call<emscripten::val>("appendChild", cValue);
+      addLabel(info, "cValue", "nF");
+      addBreak(info);
+      addBreak(info);
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "H");
-      addBreak(info);
-      addBreak(info);
-      addLabel(info, "cValue", "C = ", "left-label");
-      info.call<emscripten::val>("appendChild", cValue);
-      addLabel(info, "cValue", "F");
       addBreak(info);
       addBreak(info);
       addLabel(info, "fValue", "∴ f = ", "left-label");
@@ -1344,12 +1398,18 @@ void InitializePage(int i)
       break;
     case (6):
     {
-      emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
+      emscripten::val lValue = addInputField("lValue", true, 0.1, 0);
       emscripten::val cValue = addInputField("cValue", true, 0.1, 0);
-      emscripten::val vValue = addInputField("vValue", true, 0.1, 0);
+      emscripten::val vValue = addInputField("vValue", false, 0.1, 0);
       emscripten::val pValue = addInputField("pValue", true, 0.1, 0);
       emscripten::val lpValue = addInputField("lpValue", true, 0.1, 0);
+      
+      lValue.set("value", inductance);
+      cValue.set("value", capacitance);
+      vValue.set("value", volts);
 
+      addBigParagraph(info, "P = I<sup>2</sup>R = CV<sup>2</sup>/L");
+      addParagraph(info, "Adjust your voltage to control the volume. dB are being read at 0.55m from the source, because who sits a whole meter away from their speakers?");
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "H");
@@ -1357,23 +1417,23 @@ void InitializePage(int i)
       addBreak(info);
       addLabel(info, "cValue", "C = ", "left-label");
       info.call<emscripten::val>("appendChild", cValue);
-      addLabel(info, "cValue", "F");
+      addLabel(info, "cValue", "nF");
       addBreak(info);
       addBreak(info);
       addLabel(info, "vValue", "v = ", "left-label");
       info.call<emscripten::val>("appendChild", vValue);
-      addLabel(info, "vValue", "V");
+      addLabel(info, "vValue", "mV");
       addBreak(info);
       addBreak(info);
       addLabel(info, "pValue", "P = ", "left-label");
       info.call<emscripten::val>("appendChild", pValue);
-      addLabel(info, "pValue", "W");
+      addLabel(info, "pValue", "&microW");
       addBreak(info);
       addBreak(info);
       addLabel(info, "lpValue", "∴ L<sub>p</sub> = ", "left-label");
       info.call<emscripten::val>("appendChild", lpValue);
       addLabel(info, "lpValue", "dB");
-      addBigParagraph(info, "GOAL: ?");
+      addBigParagraph(info, "GOAL: 30-70 dB");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
@@ -1391,6 +1451,9 @@ void InitializePage(int i)
       emscripten::val rValue = addInputField("rValue", false, 2, 0, 16, 6);
       emscripten::val efficiencyValue = addInputField("efficiencyValue", true, 0.01);
       emscripten::val sensitivityValue = addInputField("sensitivityValue", false, 0.1, 0, 109.453876, 88);
+
+      rValue.set("value", resistance);
+
       addParagraph(info, "Now, we give you the freedom to manipulate the statistics of the speaker.");
       addParagraph(info, "The resistance of the speaker, which would be called the speaker impedance in an AC circuit, controls the time constant and the initial sound volume. Since it changes two key values rather than just one, we have restricted changing its value until now.");
       addParagraph(info, "Speaker sensitivity, which is a measure of the efficiency of a speaker to convert electrical to sound energy, is often measured as the volume of the sound from a distance of 1 meter when 1 watt is passed through it.");
@@ -1415,7 +1478,8 @@ void InitializePage(int i)
       addLabel(info, "efficiencyValue", "∴ ŋ = ", "left-label");
       info.call<emscripten::val>("appendChild", efficiencyValue);
       addLabel(info, "efficiencyValue", "% efficiency");
-      enablePlayButton();
+      disablePlayButton("Please lower the volume.");
+      playButtonEnabled = false;
       enableNextButton();
       break;
     }
@@ -1434,8 +1498,10 @@ void InitializePage(int i)
       emscripten::val c11Value = addInputField("c11Value", false, 0.1, 0);
       emscripten::val c12Value = addInputField("c12Value", false, 0.1, 0);
       emscripten::val c13Value = addInputField("c13Value", false, 0.1, 0);
+      emscripten::val fValue = addInputField("fValue", true, 0.1, 0);
 
       addParagraph(info, "Time to create a scale! Match each frequency as closely as you can.");
+      addParagraph(info, "Match: C", "match");
       addLabel(info, "c1Value", "C<sub>4</sub>: 261.63 Hz");
       addCapacitorLabelSet(info, c1Value, "c1Value", "1");
       addBreak(info);
@@ -1486,6 +1552,11 @@ void InitializePage(int i)
       addBreak(info);
       addLabel(info, "c13Value", "C<sub>5</sub>: 523.25 Hz");
       addCapacitorLabelSet(info, c13Value, "c13Value", "13");
+      addBreak(info);
+      addBreak(info);
+      addLabel(info, "fValue", "∴ f = ", "left-label");
+      info.call<emscripten::val>("appendChild", fValue);
+      addLabel(info, "fValue", "Hz");
       enablePlayButton();
       enableNextButton();
       break;
@@ -1512,7 +1583,6 @@ void StoreData(int page); // forward declaration
 
 void RenderSidebar()
 {
-  static bool nextButtonEnabled = false;
   switch(page) {
     case (0):
       break;
@@ -1529,6 +1599,7 @@ void RenderSidebar()
         } else {
           tConstant.set("value", emscripten::val(tV));
         }
+        inductance = stod(inductor["value"].as<std::string>());
       }
 
       emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
@@ -1575,19 +1646,156 @@ void RenderSidebar()
     }
     case 4:
     {
+      emscripten::val capacitor = document.call<emscripten::val>("getElementById", emscripten::val("cValue"));
+      emscripten::val fr = document.call<emscripten::val>("getElementById", emscripten::val("fValue"));
+      double f;
+      if (capacitor["value"].as<std::string>() != "") {
+        f = 1 / (2 * pi * sqrt(stod(capacitor["value"].as<std::string>()) / 1000000000 * inductance));
+        if (std::isinf(f)) {
+          fr.set("value", emscripten::val("Infinity"));
+        } else {
+          fr.set("value", emscripten::val(f));
+          capacitance = stod(capacitor["value"].as<std::string>());
+          frequency = f;
+        }
+      }
+      // TODO: frequency adjustment
+      break;
+    }
+    case 6:
+    {
+      emscripten::val voltage = document.call<emscripten::val>("getElementById", emscripten::val("vValue"));
+      emscripten::val power = document.call<emscripten::val>("getElementById", emscripten::val("pValue"));
+      emscripten::val volume = document.call<emscripten::val>("getElementById", emscripten::val("lpValue"));
+      double p;
+      if (voltage["value"].as<std::string>() != "") {
+        p = 0.5* capacitance * stod(voltage["value"].as<std::string>()) * stod(voltage["value"].as<std::string>()) / inductance;
+        if (std::isinf(p)) {
+          power.set("value", emscripten::val("Infinity"));
+          volume.set("value", emscripten::val("Infinity"));
+        } else {
+          power.set("value", emscripten::val(p));
+          volume.set("value", emscripten::val(audio::watts_to_decibels(p / 1000000, 0.55)));
+          watts = p;
+          volts = stod(voltage["value"].as<std::string>());
+        }
+      }
+      // TODO: initialVolume adjustment
       break;
     }
     case 7:
     {
+      emscripten::val rValue = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
       emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
       double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
       efficiency.set("value", emscripten::val(efficiencyValue*100));
+      if (rValue["value"].as<std::string>() != "" && sensitivity["value"].as<std::string>() != "") {
+        double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
+        efficiency.set("value", emscripten::val(efficiencyValue*100));
+        double r = stod(rValue["value"].as<std::string>());
+        double t = 2 * inductance / r;
+        std::vector<double> f = {frequency};
+        resistance = r;
+        
+        // std::cout << std::to_string(watts/4 * r) << std::endl;
+        if(playButtonEnabled && watts/4 * r > 1) {
+          disablePlayButton("Please lower the volume.");
+          playButtonEnabled = false;
+        } else if (!playButtonEnabled && watts/4 * r <= 1){
+          enablePlayButton(true);
+          playButtonEnabled = true;
+        }
+
+        static std::vector<double> previousVars;
+        std::vector<double> vars = {watts, r, t};
+        if(previousVars != vars) {
+          //audio::set_vars(f, watts/4 * r, t);
+          // TODO: set vars
+          previousVars = vars;
+        }
+      }
+      
+      double initialVolume = -1;
+      if (false) {
+        //audio::set_initial_volume(initialVolume);
+      }
+      // TODO: set initial volume
       break;
     }
     case 8:
+    {
+      static int counter = 1;
+      double cv;
+      emscripten::val match = document.call<emscripten::val>("getElementById", emscripten::val("match"));
+      emscripten::val fValue = document.call<emscripten::val>("getElementById", emscripten::val("fValue"));
+      switch(counter) {
+        case(1):
+          match.set("innerHTML", "Match: C4");
+          break;
+        case(2):
+          match.set("innerHTML", "Match: C#");
+          break;
+        case(3):
+          match.set("innerHTML", "Match: D");
+          break;
+        case(4):
+          match.set("innerHTML", "Match: D#");
+          break;
+        case(5):
+          match.set("innerHTML", "Match: E");
+          break;
+        case(6):
+          match.set("innerHTML", "Match: F");
+          break;
+        case(7):
+          match.set("innerHTML", "Match: F#");
+          break;
+        case(8):
+          match.set("innerHTML", "Match: G");
+          break;
+        case(9):
+          match.set("innerHTML", "Match: G#");
+          break;
+        case(10):
+          match.set("innerHTML", "Match: A");
+          break;
+        case(11):
+          match.set("innerHTML", "Match: A#");
+          break;
+        case(12):
+          match.set("innerHTML", "Match: B");
+          break;
+        case(13):
+          match.set("innerHTML", "Match: C5");
+          break;
+        default:
+          break;
+      }
+      if (document.call<emscripten::val>("getElementById", "c" + std::to_string(counter) + "Value")["value"].as<std::string>() != "") {
+        cv = stod(document.call<emscripten::val>("getElementById", "c" + std::to_string(counter) + "Value")["value"].as<std::string>());
+        double f = 1 / (2 * pi * sqrt(cv / 1000000000 * inductance));
+        fValue.set("value", f);
+        static std::vector<double> previousVars;
+        std::vector<double>vars = {f, watts, resistance, inductance};
+        if (previousVars != vars)
+        {
+          std::vector<double>freqs = {f};
+          //audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
+          // TODO: set vars
+          previousVars = vars;
+        }
+
+      
+        if(abs(f - frequencyArray[counter - 1]) < 2) {
+          document.call<emscripten::val>("getElementById", "c" + std::to_string(counter) + "Value").set("disabled", true);
+          counter++;
+        }
+      }
+      
       circuitCompleted = true;
       break;
+    }
     case 9:
     {
       static std::vector<double> previousFreqs;
@@ -1635,6 +1843,8 @@ void RenderSidebar()
 
       break;
     }
+    case 10:
+      break;
     default:
       break;
   }
@@ -1782,6 +1992,11 @@ int main() {
   document.call<void>("addEventListener",
                       emscripten::val("mouseup"),
                       emscripten::val::module_property("InteractWithCanvas"));
+                      
+  document.call<void>("addEventListener",
+                      emscripten::val("keydown"),
+                      emscripten::val::module_property("InteractWithKeyboard"));
+
 
   emscripten::val canvas = document.call<emscripten::val>("getElementById", emscripten::val("canvas"));
   emscripten::val ctx = canvas.call<emscripten::val>("getContext", emscripten::val("2d"));
@@ -1804,6 +2019,7 @@ int main() {
 EMSCRIPTEN_BINDINGS(bindings)
 {
   emscripten::function("InteractWithCanvas", InteractWithCanvas);
+  emscripten::function("InteractWithKeyboard", InteractWithKeyboard);
   emscripten::function("ResizeCanvas", ResizeCanvas);
   emscripten::function("SelectPage", SelectPage);
   emscripten::function("NextPage", NextPage);
