@@ -1463,9 +1463,12 @@ void RetrieveData()
     audio::set_frequencies(defaultFrequencies);
   }
   if (pageNumber.typeOf().as<std::string>() == "string") {
-    SelectPage(std::stoi(pageNumber.as<std::string>()));
+    int page = std::stoi(pageNumber.as<std::string>());
+    SelectPage(page);
+    document.call<emscripten::val>("getElementById", emscripten::val("b" + std::to_string(page+1))).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   } else {
     SelectPage(0);
+    document.call<emscripten::val>("getElementById", emscripten::val("b1")).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   }
 }
 
