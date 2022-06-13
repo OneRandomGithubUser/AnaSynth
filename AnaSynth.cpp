@@ -1559,10 +1559,11 @@ void RenderSidebar()
         double r = stod(resistance["value"].as<std::string>());
         double t = 2 * inductance / r;
         std::vector<double> f = {frequency};
-        std::cout << f << std::endl;
         
+        // std::cout << std::to_string(watts/4 * r) << std::endl;
+
         static std::vector<double> previousVars;
-        std::vector<double> vars = {r, t};
+        std::vector<double> vars = {watts, r, t};
         if(previousVars != vars) {
           audio::set_vars(f, watts/4 * r, t);
           previousVars = vars;
