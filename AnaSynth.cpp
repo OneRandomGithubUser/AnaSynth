@@ -29,7 +29,7 @@ static int page;
 bool circuitCompleted = false;
 boost::uuids::random_generator uuidGenerator;
 std::vector<boost::uuids::uuid> uuids;
-static double resistance = 4, efficiency = 86.5, inductance = -1, capacitance = -1, frequency = -1, initialVolume = -1, timeConstant = -1, watts = -1, volts = -1, decibels = -1;
+static double resistance = 4, efficiency = 86.5, inductance = 0, capacitance = 0, frequency = 0, initialVolume = 0, timeConstant = 0, watts = 0, volts = 0, decibels = 0;
 static bool playButtonEnabled = false;
 static bool nextButtonEnabled = false;
 
