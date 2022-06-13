@@ -34,6 +34,8 @@ static const std::map<std::string, double> frequencyMap = {
   {"C5", 523.25}
 };
 
+void PlayOrPauseSound(emscripten::val event);
+
 namespace audio
 {
   emscripten::val globalAudioContext = emscripten::val::global("AudioContext");
@@ -87,18 +89,77 @@ namespace audio
       }
     }
   };*/
+  void volume_control()
+  {
+    if (audioContext.has_value() && gainNode.has_value())
+    {
+      // time after play() in seconds. add one TIME_CONSTANT since this is the time at the end of the exponentialRampToValueAtTime
+      double offsetTime = audioContext.value()["currentTime"].as<double>() - beginTime;
+      if (round(offsetTime/TIME_CONSTANT) == timeConstants)
+      {
+        timeConstants = round(offsetTime/TIME_CONSTANT) + 1;
+        if (pow(e, -timeConstants) > 2*pow(10,-45)) // can't exponentialRampToValueAtTime to 0 if timeConstants is too high
+        {
+          std::cout << offsetTime << " sec to " << offsetTime+TIME_CONSTANT << " sec: decrease to volume of " << 100*pow(e, -timeConstants) << "% (e^-" << timeConstants << ") from volume " << gainNode.value()["gain"]["value"].as<double>() << " at " << timeConstants << " time constants\n";
+          gainNode.value()["gain"].call<void>("setValueAtTime", gainNode.value()["gain"]["value"], audioContext.value()["currentTime"]);
+          gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
+                                                         emscripten::val(initialVolume * pow(e, -timeConstants)),
+                                                         emscripten::val(beginTime + offsetTime + TIME_CONSTANT));
+        }
+      }
+    }
+  }
+  void play_or_pause()
+  {
+    if (!initialized)
+    {
+      // This function can be called ONLY after audio::initialize() is called
+      // emscripten currently does not have much support for throwing std::exception
+      std::cout << "Error: audio::play() called before audio::initialize()\n";
+    }
+    if (playing)
+    {
+      // pause
+      emscripten::val currentTime = audioContext.value()["currentTime"];
+      gainNode.value()["gain"].call<void>("cancelScheduledValues", currentTime);
+      for (auto &oscillator: oscillators)
+      {
+        oscillator.call<void>("disconnect", gainNode.value());
+      }
+      window.call<void>("clearInterval", volumeManager.value());
+      timeConstants = 0;
+      playing = false;
+    } else {
+      // play
+      for (auto &oscillator: oscillators)
+      {
+        oscillator.call<void>("connect", gainNode.value());
+      }
+      beginTime = audioContext.value()["currentTime"].as<double>();
+      // mute sound then go to full volume in 0.05 seconds
+      gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
+      volume_control();
+      volumeManager.emplace(
+              window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
+                                           emscripten::val(TIME_CONSTANT * 1000)));
+      playing = true;
+    }
+  }
   void set_frequencies(std::vector<double>& frequencies)
   {
+    // if called while sound is playing, pauses the sound
     if (initialized)
     {
       // This part can be called ONLY after audio::initialize() is called
       // emscripten currently does not have much support for throwing std::exception
+      if (playing)
+      {
+        std::cout << "playing\n";
+        PlayOrPauseSound(emscripten::val("dummyVar"));
+      }
       for (auto &oscillator: oscillators)
       {
         oscillator.call<void>("stop");
-        if (playing) {
-          oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
-        }
       }
       oscillators.clear();
       for (auto &frequency: frequencies) {
@@ -222,65 +283,6 @@ namespace audio
       set_frequencies(_frequencies);
     }
   }
-  void volume_control()
-  {
-    if (audioContext.has_value() && gainNode.has_value())
-    {
-      // time after play() in seconds. add one TIME_CONSTANT since this is the time at the end of the exponentialRampToValueAtTime
-      double offsetTime = audioContext.value()["currentTime"].as<double>() - beginTime;
-      if (round(offsetTime/TIME_CONSTANT) == timeConstants)
-      {
-        timeConstants = round(offsetTime/TIME_CONSTANT) + 1;
-        if (pow(e, -timeConstants) > 2*pow(10,-45)) // can't exponentialRampToValueAtTime to 0 if timeConstants is too high
-         {
-          std::cout << offsetTime << " sec to " << offsetTime+TIME_CONSTANT << " sec: decrease to volume of " << 100*pow(e, -timeConstants) << "% (e^-" << timeConstants << ") from volume " << gainNode.value()["gain"]["value"].as<double>() << " at " << timeConstants << " time constants\n";
-          gainNode.value()["gain"].call<void>("setValueAtTime", gainNode.value()["gain"]["value"], audioContext.value()["currentTime"]);
-          gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
-                                                         emscripten::val(initialVolume * pow(e, -timeConstants)),
-                                                         emscripten::val(beginTime + offsetTime + TIME_CONSTANT));
-        }
-      }
-    }
-  }
-  void play_or_pause()
-  {
-    if (!initialized)
-    {
-      // This function can be called ONLY after audio::initialize() is called
-      // emscripten currently does not have much support for throwing std::exception
-      std::cout << "Error: audio::play() called before audio::initialize()\n";
-    }
-    if (playing)
-    {
-      emscripten::val currentTime = audioContext.value()["currentTime"];
-      gainNode.value()["gain"].call<void>("cancelScheduledValues", currentTime);
-      // fade out in 0.1 seconds - doesn't actually work because of disconnect so, if time leftover, TODO
-      gainNode.value()["gain"].call<emscripten::val>("exponentialRampToValueAtTime",
-                                                     emscripten::val(0.000001),
-                                                     emscripten::val(currentTime.as<double>() + 0.1));
-      for (auto &oscillator: oscillators)
-      {
-        oscillator.call<void>("disconnect", gainNode.value());
-      }
-      window.call<void>("clearInterval", volumeManager.value());
-      timeConstants = 0;
-      playing = false;
-    } else {
-      // play
-      for (auto &oscillator: oscillators)
-      {
-        oscillator.call<void>("connect", gainNode.value());
-      }
-      beginTime = audioContext.value()["currentTime"].as<double>();
-      // mute sound then go to full volume in 0.05 seconds
-      gainNode.value()["gain"].set("value", emscripten::val(initialVolume));
-      volume_control();
-      volumeManager.emplace(
-              window.call<emscripten::val>("setInterval", emscripten::val::module_property("VolumeControl"),
-                                           emscripten::val(TIME_CONSTANT * 1000)));
-      playing = true;
-    }
-  }
   double watts_to_decibels(double power, double distance)
   {
     // assumes Normal Temperature and Pressure, aka 20 degrees Celsius,	101.325 kPa
@@ -303,18 +305,6 @@ namespace audio
 
 void PlayOrPauseSound(emscripten::val event)
 {
-  switch(page) {
-    case(9):
-    {
-      emscripten::val note1 = document.call<emscripten::val>("getElementById", emscripten::val("s1"));
-      std::vector<double>freqs = {frequencyMap.at(note1["value"].as<std::string>())};
-      std::cout << note1["value"].as<std::string>() << std::endl;
-      audio::set_vars(freqs, 0.5, 1.5);
-      break;
-    }
-    default:
-      break;
-  }
   audio::play_or_pause();
   emscripten::val play = document.call<emscripten::val>("getElementById", emscripten::val("play"));
   if(audio::get_playing()) {
@@ -1416,6 +1406,17 @@ void RenderSidebar()
     case 8:
       circuitCompleted = true;
       break;
+    case 9:
+    {
+      static std::vector<double> previousFreqs;
+      std::vector<double>freqs = {frequencyMap.at(document.call<emscripten::val>("getElementById", emscripten::val("s1"))["value"].as<std::string>())};
+      if (previousFreqs != freqs)
+      {
+        audio::set_vars(freqs, 0.5, 1.5);
+        previousFreqs = freqs;
+      }
+      break;
+    }
     default:
       break;
   }
