@@ -18,7 +18,7 @@ const double e = std::numbers::e;
 static int page;
 bool circuitCompleted = false;
 
-static std::map<std::string, double> frequencyMap = {
+static const std::map<std::string, double> frequencyMap = {
   {"C4", 261.63},
   {"C#", 277.18},
   {"D", 293.66},
@@ -96,7 +96,9 @@ namespace audio
       for (auto &oscillator: oscillators)
       {
         oscillator.call<void>("stop");
-        oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+        if (playing) {
+          oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+        }
       }
       oscillators.clear();
       for (auto &frequency: frequencies) {
@@ -305,7 +307,7 @@ void PlayOrPauseSound(emscripten::val event)
     case(9):
     {
       emscripten::val note1 = document.call<emscripten::val>("getElementById", emscripten::val("s1"));
-      std::vector<double>freqs = {frequencyMap[note1["value"].as<std::string>()]};
+      std::vector<double>freqs = {frequencyMap.at(note1["value"].as<std::string>())};
       std::cout << note1["value"].as<std::string>() << std::endl;
       audio::set_vars(freqs, 0.5, 1.5);
       break;
@@ -1496,9 +1498,12 @@ void RetrieveData()
     audio::set_frequencies(defaultFrequencies);
   }
   if (pageNumber.typeOf().as<std::string>() == "string") {
-    SelectPage(std::stoi(pageNumber.as<std::string>()));
+    int page = std::stoi(pageNumber.as<std::string>());
+    SelectPage(page);
+    document.call<emscripten::val>("getElementById", emscripten::val("b" + std::to_string(page+1))).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   } else {
     SelectPage(0);
+    document.call<emscripten::val>("getElementById", emscripten::val("b1")).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   }
 }
 
