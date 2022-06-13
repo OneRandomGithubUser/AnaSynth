@@ -1540,6 +1540,7 @@ void InitializePage(int i)
         disablePlayButton();
       }
       disableNextButton();
+      frequency = -1;
       break;
     }
     case (5):
@@ -1738,7 +1739,9 @@ void InitializePage(int i)
       addLabel(info, "fValue", "∴ f = ", "left-label");
       info.call<emscripten::val>("appendChild", fValue);
       addLabel(info, "fValue", "Hz");
-      enablePlayButton();
+      disablePlayButton();
+      playButtonEnabled = false;
+      frequency = -1;
       enableNextButton();
       break;
     }
@@ -1996,8 +1999,13 @@ void RenderSidebar()
         fValue.set("value", f);
         static std::vector<double> previousVars;
         std::vector<double>vars = {f, watts, resistance, inductance};
+        frequency = f;
         if (previousVars != vars)
         {
+          if(!playButtonEnabled) {
+            enablePlayButton();
+            playButtonEnabled = true;
+          }
           std::vector<double>freqs = {f};
           //audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
           if (audio::get_playing()) {
@@ -2007,7 +2015,7 @@ void RenderSidebar()
           std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
           for (auto freq : freqs) {
             boost::uuids::uuid uuid = uuidGenerator();
-            defaults.try_emplace(uuid, std::make_tuple(freq, watts/4 * resistance, 2*inductance/resistance));
+            defaults.try_emplace(uuid, std::make_tuple(freq, initialVolume, timeConstant));
           }
           audio::add_rlcs(defaults);
           previousVars = vars;
