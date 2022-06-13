@@ -681,6 +681,96 @@ void DrawTwoCircuits(emscripten::val ctx, bool highlightCapacitor, bool highligh
   ctx.call<void>("fill");
 }
 
+void DrawFourierCircuit(emscripten::val ctx, bool highlightCapacitor, bool highlightInductor, bool highlightSpeaker, bool highlightBattery) {
+  double width = ctx["canvas"]["width"].as<double>();
+  double height = ctx["canvas"]["height"].as<double>();
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.7+39, height*0.3);
+  ctx.call<void>("lineTo", width*0.9, height*0.3);
+  ctx.call<void>("lineTo", width*0.9, height*0.1);
+  ctx.call<void>("lineTo", width*0.3+10, height*0.1);
+  ctx.call<void>("stroke");
+  DrawSpeaker(ctx, width*0.3, height*0.1, highlightSpeaker);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3-12, height*0.1);
+  ctx.call<void>("lineTo", width*0.1, height*0.1);
+  ctx.call<void>("lineTo", width*0.1, height*0.3);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.3);
+  ctx.call<void>("lineTo", width*0.3-25, height*0.2);
+  ctx.call<void>("stroke");
+  DrawBattery(ctx, width*0.3, height*0.2, highlightBattery);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.2);
+  ctx.call<void>("lineTo", width*0.3+25, height*0.3-20);
+  ctx.call<void>("stroke");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25, height*0.3);
+  if (audio::get_playing()) {
+    ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * 0.3);
+  } else {
+    ctx.call<void>("lineTo", width * 0.3 + 25, height * 0.3 - 20);
+  }
+  ctx.call<void>("stroke");
+  DrawCapacitor(ctx, width*0.3, height*0.3, highlightCapacitor);
+  ctx.call<void>("beginPath");
+  ctx.call<void>("moveTo", width*0.3+25+20, height*0.3);
+  ctx.call<void>("lineTo", width*0.7-40, height*0.3);
+  ctx.call<void>("stroke");
+  DrawInductor(ctx, width*0.7, height*0.3, highlightInductor);
+  ctx.set("fillStyle", emscripten::val("black"));
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.3, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+25, height*0.3-20, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+  ctx.call<void>("beginPath");
+  ctx.call<void>("arc", width*0.3+45, height*0.3, 2, 0, 2*pi);
+  ctx.call<void>("fill");
+
+  for(int i = 0; i < 3; i++) {
+    ctx.call<void>("beginPath");
+    ctx.call<void>("moveTo", width*0.1, height*(0.3 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.1, height*(0.5 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.3-25, height*(0.5 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.3-25, height*(0.4 + (0.2 * i)));
+    ctx.call<void>("stroke");
+    ctx.call<void>("beginPath");
+    ctx.call<void>("moveTo", width*0.7+39, height*(0.5 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.9, height*(0.5 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.9, height*(0.3 + (0.2 * i)));
+    ctx.call<void>("stroke");
+    DrawBattery(ctx, width*0.3, height*(0.4 + (0.2 * i)), highlightBattery);
+    ctx.call<void>("beginPath");
+    ctx.call<void>("moveTo", width*0.3+25, height*(0.4 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.3+25, height*(0.5 + (0.2 * i)) - 20);
+    ctx.call<void>("stroke");
+    ctx.call<void>("beginPath");
+    ctx.call<void>("moveTo", width*0.3+25, height*(0.5 + (0.2 * i)));
+    if (audio::get_playing()) {
+      ctx.call<void>("lineTo", width * 0.3 + 25 + 20, height * (0.5 + (0.2 * i)));
+    } else {
+      ctx.call<void>("lineTo", width * 0.3 + 25, height * (0.5 + (0.2 * i)) - 20);
+    }
+    ctx.call<void>("stroke");
+    DrawCapacitor(ctx, width*0.3, height*(0.5 + (0.2 * i)), highlightCapacitor);
+    ctx.call<void>("beginPath");
+    ctx.call<void>("moveTo", width*0.3+25+20, height*(0.5 + (0.2 * i)));
+    ctx.call<void>("lineTo", width*0.7-40, height*(0.5 + (0.2 * i)));
+    ctx.call<void>("stroke");
+    DrawInductor(ctx, width*0.7, height*(0.5 + (0.2 * i)), highlightInductor);
+    ctx.set("fillStyle", emscripten::val("black"));
+    ctx.call<void>("beginPath");
+    ctx.call<void>("arc", width*0.3+25, height*(0.5 + (0.2 * i)), 2, 0, 2*pi);
+    ctx.call<void>("fill");
+    ctx.call<void>("beginPath");
+    ctx.call<void>("arc", width*0.3+25, height*(0.5 + (0.2 * i))-20, 2, 0, 2*pi);
+    ctx.call<void>("fill");
+    ctx.call<void>("beginPath");
+    ctx.call<void>("arc", width*0.3+45, height*(0.5 + (0.2 * i)), 2, 0, 2*pi);
+    ctx.call<void>("fill");
+  }
+}
 
 int split(int input, int totalDistance)
 {
@@ -876,6 +966,9 @@ void RenderCanvas()
     }
     case 9:
       DrawTwoCircuits(ctx, false, false, false, false);
+      break;
+    case 10:
+      DrawFourierCircuit(ctx, false, false, false, false);
       break;
     default:
       ctx.call<void>("beginPath");
