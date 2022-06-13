@@ -1,3 +1,3 @@
 # AnaSynth
- 
-This is a program designed to simulate the creation of an analog DC synthesizer from basic electrical components (without including a source of AC power, because that's cheating! - says no one but us).
+
+This is a program designed to simulate the creation of an analog DC synthesizer from basic electrical components (without including a source of AC power, because that's cheating! - says no one but us). All that is needed is a speaker, resistor, capacitor, and a DC battery. Make sine waves, then layer them with (finite) Fourier transforms to make any wave you want! This website is designed for people who already know the AP Physics C curriculum, specifically the knowledge about magnetic field of solenoids, RC, RL, and LC circuits.
