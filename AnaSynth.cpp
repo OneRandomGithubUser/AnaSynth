@@ -307,8 +307,9 @@ void PlayOrPauseSound(emscripten::val event)
     case(9):
     {
       emscripten::val note1 = document.call<emscripten::val>("getElementById", emscripten::val("s1"));
-      std::vector<double>freqs = {frequencyMap.at(note1["value"].as<std::string>())};
-      std::cout << note1["value"].as<std::string>() << std::endl;
+      emscripten::val note2 = document.call<emscripten::val>("getElementById", emscripten::val("s2"));
+      std::vector<double>freqs = { frequencyMap.at(note1["value"].as<std::string>()), frequencyMap.at(note2["value"].as<std::string>()) };
+      // std::cout << note1["value"].as<std::string>() << std::endl;
       audio::set_vars(freqs, 0.5, 1.5);
       break;
     }
