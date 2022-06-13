@@ -79,7 +79,9 @@ namespace audio
       for (auto &oscillator: oscillators)
       {
         oscillator.call<void>("stop");
-        oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+        if (playing) {
+          oscillator.call<void>("disconnect"); // disconnect oscillator from audio output
+        }
       }
       oscillators.clear();
       for (auto &frequency: frequencies) {
