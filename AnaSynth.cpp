@@ -1398,7 +1398,9 @@ void InitializePage(int i)
       {
         fValue.set("value", emscripten::val(frequency));
       }
-
+      addParagraph(info, "The frequency of an RLC circuit does not depend on the resistor and is equal to");
+      addBigParagraph(info, "1/( 2π√(LC) )");
+      addParagraph(info, "The limits of human hearing is 20 to 20000 Hz, but depending on your age and the quality of your speakers, you might not be able to hear it if you put it at a high or low pitch!");
       addLabel(info, "cValue", "C = ", "left-label");
       info.call<emscripten::val>("appendChild", cValue);
       addLabel(info, "cValue", "nF");
@@ -1412,13 +1414,14 @@ void InitializePage(int i)
       addLabel(info, "fValue", "∴ f = ", "left-label");
       info.call<emscripten::val>("appendChild", fValue);
       addLabel(info, "fValue", "Hz");
-      addBigParagraph(info, "GOAL: f = 440 Hz");
+      addBigParagraph(info, "GOAL: 20-20000 Hz");
+      addBigParagraph(info, "RECOMMENDED: 200-5000 Hz");
       if (circuitCompleted) {
         enablePlayButton();
       } else {
         disablePlayButton();
       }
-      enableNextButton();
+      disableNextButton();
       break;
     }
     case (5):
@@ -1714,17 +1717,21 @@ void RenderSidebar()
         if (std::isinf(f)) {
           fr.set("value", emscripten::val("Infinity"));
         } else {
-          fr.set("value", emscripten::val(f));
-          if (frequency != f) {
-            capacitance = stod(capacitor["value"].as<std::string>());
-            frequency = f;
-            if (audio::get_playing()) {
-              PlayOrPauseSound(emscripten::val(""));
+          if (frequency < 20000 && frequency > 20) {
+            fr.set("value", emscripten::val(f));
+            if (frequency != f) {
+              enableNextButton();
+              capacitance = stod(capacitor["value"].as<std::string>());
+              frequency = f;
+              if (audio::get_playing()) {
+                PlayOrPauseSound(emscripten::val(""));
+              }
+              audio::remove_all_rlcs();
+              std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{
+                      {uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
+              audio::add_rlcs(defaults);
+              StoreData(page);
             }
-            audio::remove_all_rlcs();
-            std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{{uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
-            audio::add_rlcs(defaults);
-            StoreData(page);
           }
         }
       }
@@ -1742,7 +1749,7 @@ void RenderSidebar()
           power.set("value", emscripten::val("Infinity"));
           volume.set("value", emscripten::val("Infinity"));
         } else {
-          if (watts != p) {
+          if (watts != p && audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55) > 30 && audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55) < 70) {
             if (audio::get_playing()) {
               PlayOrPauseSound(emscripten::val(""));
             }
@@ -1944,6 +1951,7 @@ void SelectPage(int i)
   page = i;
   InitializePage(page);
   StoreData(page);
+  document.call<emscripten::val>("getElementById", emscripten::val("b" + std::to_string(page+1))).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
 }
 void NextPage(emscripten::val event)
 {
@@ -2048,10 +2056,8 @@ void RetrieveData()
   if (pageNumber.typeOf().as<std::string>() == "string") {
     int page = std::stoi(pageNumber.as<std::string>());
     SelectPage(page);
-    document.call<emscripten::val>("getElementById", emscripten::val("b" + std::to_string(page+1))).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   } else {
     SelectPage(0);
-    document.call<emscripten::val>("getElementById", emscripten::val("b1")).call<void>("setAttribute", emscripten::val("checked"), emscripten::val("checked"));
   }
 }
 
