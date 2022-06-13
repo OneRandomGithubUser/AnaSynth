@@ -1927,7 +1927,7 @@ void RenderSidebar()
         if(previousVars != vars) {
           //audio::set_vars(f, watts/4 * r, t);
           // TODO: set vars
-          efficiency = stod(efficiencyVal["value"].as<std::string>());
+          efficiency = stod(sensitivity["value"].as<std::string>());
           timeConstant = t;
           initialVolume = watts * audio::decibels_to_watts(efficiency, 1);
           audio::remove_all_rlcs();
