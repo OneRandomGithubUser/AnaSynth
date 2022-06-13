@@ -952,6 +952,19 @@ void DrawFourierCircuit(emscripten::val ctx, bool highlightCapacitor, bool highl
     ctx.call<void>("beginPath");
     ctx.call<void>("arc", width*0.3+45, height*(0.5 + (0.2 * i)), 2, 0, 2*pi);
     ctx.call<void>("fill");
+
+    
+    ctx.call<void>("beginPath");
+    ctx.call<void>("arc", width*0.5, height*0.93, 2, 0, 2*pi);
+    ctx.call<void>("fill");
+    ctx.call<void>("beginPath");
+    ctx.call<void>("arc", width*0.5, height*0.95, 2, 0, 2*pi);
+    ctx.call<void>("fill");
+    ctx.call<void>("beginPath");
+    ctx.call<void>("arc", width*0.5, height*0.97, 2, 0, 2*pi);
+    ctx.call<void>("fill");
+    ctx.set("font", emscripten::val("15px Arial"));
+    ctx.call<void>("fillText", emscripten::val("(10 is probably good enough)"), width*0.5+110, height*0.95);
   }
 }
 
@@ -1729,6 +1742,15 @@ void InitializePage(int i)
       addLabel(info, "s2", "Note 2:", "note-label");
       addSelectOctave(info, "s2");
       break;
+    case (10):
+    {
+      emscripten::val fValue = addInputField("fValue", false, 0.1, 0);
+
+      addLabel(info, "fValue", "f = ", "left-label");
+      info.call<emscripten::val>("appendChild", fValue);
+      addLabel(info, "fValue", "Hz");
+      break;
+    }
     case(11) :
     {
       for(int i = 0; i < 13; i++) {
@@ -2027,7 +2049,7 @@ void RenderSidebar()
           std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
           for (int i = 0; i < freqs.size(); i++) {
             boost::uuids::uuid uuid = uuidGenerator();
-            defaults.try_emplace(uuid, std::make_tuple(freqs.at(i), 0.5, 1.5));
+            defaults.try_emplace(uuid, std::make_tuple(freqs.at(i), 0.5/i, 1.5));
           }
           audio::add_rlcs(defaults);
         }
@@ -2037,7 +2059,29 @@ void RenderSidebar()
       break;
     }
     case 10:
+    {
+      static double previousFr;
+      
+      if(document.call<emscripten::val>("getElementById", emscripten::val("fValue"))["value"].as<std::string>() != "") {
+        double fr = stod(document.call<emscripten::val>("getElementById", emscripten::val("fValue"))["value"].as<std::string>());
+
+        if (previousFr != fr) {
+          if (audio::get_playing()) {
+            PlayOrPauseSound(emscripten::val(""));
+          }
+          audio::remove_all_rlcs();
+          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
+          for (int i = 1; i < 11; i++) {
+            boost::uuids::uuid uuid = uuidGenerator();
+            defaults.try_emplace(uuid, std::make_tuple(fr * i, 0.5 / double(i), 1.5));
+          }
+          audio::add_rlcs(defaults);
+          previousFr = fr;
+          StoreData(page);
+        }
+      }
       break;
+    }
     case 11:
     {
       std::vector<bool> keys = pianoKeys;
