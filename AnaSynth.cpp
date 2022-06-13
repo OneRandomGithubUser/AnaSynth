@@ -33,6 +33,10 @@ static double resistance = 4, inductance, capacitance, frequency, watts, volts;
 static bool playButtonEnabled = false;
 static bool nextButtonEnabled = false;
 
+static std::vector<bool> pianoKeys;
+static std::vector<bool> previousKeys;
+static std::vector<boost::uuids::uuid> pianouuids;
+
 static const std::map<std::string, double> frequencyMap = {
   {"C4", 261.63},
   {"C#", 277.18},
@@ -405,8 +409,92 @@ void InteractWithKeyboard(emscripten::val event)
     {
       std::string eventName = event["type"].as<std::string>();
       if(eventName == "keydown") {
-        if(event["keyCode"].as<int>() == 90) {
-          std::cout << "z" << std::endl;
+        switch(event["keyCode"].as<int>()) {
+          case 90:
+            pianoKeys.at(0) = true;
+            break;
+          case 83:
+            pianoKeys.at(1) = true;
+            break;
+          case 88:
+            pianoKeys.at(2) = true;
+            break;
+          case 68:
+            pianoKeys.at(3) = true;
+            break;
+          case 67:
+            pianoKeys.at(4) = true;
+            break;
+          case 86:
+            pianoKeys.at(5) = true;
+            break;
+          case 71:
+            pianoKeys.at(6) = true;
+            break;
+          case 66:
+            pianoKeys.at(7) = true;
+            break;
+          case 72:
+            pianoKeys.at(8) = true;
+            break;
+          case 78:
+            pianoKeys.at(9) = true;
+            break;
+          case 74:
+            pianoKeys.at(10) = true;
+            break;
+          case 77:
+            pianoKeys.at(11) = true;
+            break;
+          case 188:
+            pianoKeys.at(12) = true;
+            break;
+          default:
+            break;
+        }
+      } else if (eventName == "keyup") {
+        switch(event["keyCode"].as<int>()) {
+          case 90:
+            pianoKeys.at(0) = false;
+            break;
+          case 83:
+            pianoKeys.at(1) = false;
+            break;
+          case 88:
+            pianoKeys.at(2) = false;
+            break;
+          case 68:
+            pianoKeys.at(3) = false;
+            break;
+          case 67:
+            pianoKeys.at(4) = false;
+            break;
+          case 86:
+            pianoKeys.at(5) = false;
+            break;
+          case 71:
+            pianoKeys.at(6) = false;
+            break;
+          case 66:
+            pianoKeys.at(7) = false;
+            break;
+          case 72:
+            pianoKeys.at(8) = false;
+            break;
+          case 78:
+            pianoKeys.at(9) = false;
+            break;
+          case 74:
+            pianoKeys.at(10) = false;
+            break;
+          case 77:
+            pianoKeys.at(11) = false;
+            break;
+          case 188:
+            pianoKeys.at(12) = false;
+            break;
+          default:
+            break;
         }
       }
       break;
@@ -1597,6 +1685,22 @@ void InitializePage(int i)
       addLabel(info, "s2", "Note 2:", "note-label");
       addSelectOctave(info, "s2");
       break;
+    case(11) :
+    {
+      for(int i = 0; i < 13; i++) {
+        pianoKeys.emplace_back(false);
+        previousKeys.emplace_back(false);
+      }
+      audio::remove_all_rlcs();
+      std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
+      for (int i = 0; i < 13; i++) {
+        boost::uuids::uuid uuid = uuidGenerator();
+        defaults.try_emplace(uuid, std::make_tuple(frequencyArray[i], 0.5, 1.5));
+        pianouuids.emplace_back(uuid);
+      }
+      audio::add_rlcs(defaults);
+      break;
+    }
     default:
       printf("page out of range\n");
       break;
@@ -1863,12 +1967,27 @@ void RenderSidebar()
         previousFreqs = freqs;
         StoreData(page);
       }
-
-
       break;
     }
     case 10:
       break;
+    case 11:
+    {
+      std::vector<bool> keys = pianoKeys;
+      for(int i = 0; i < 13; i++) {
+        if(previousKeys.at(i) != keys.at(i)) {
+          // std::cout << i << std::endl;
+          std::vector<boost::uuids::uuid> fr = {pianouuids.at(i)};
+          // if(keys.at(i)) {
+          audio::play_or_stop(fr);
+          // } else if(!keys.at(i)) {
+          //   audio::remove_rlcs(fr);
+          // }
+        }
+      }
+      previousKeys = keys;
+      break;
+    }
     default:
       break;
   }
@@ -2019,6 +2138,9 @@ int main() {
                       
   document.call<void>("addEventListener",
                       emscripten::val("keydown"),
+                      emscripten::val::module_property("InteractWithKeyboard"));
+  document.call<void>("addEventListener",
+                      emscripten::val("keyup"),
                       emscripten::val::module_property("InteractWithKeyboard"));
 
 

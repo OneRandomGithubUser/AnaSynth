@@ -1714,12 +1714,11 @@ var ASM_CONSTS = {
     }
 
   
-    /**
-     * @param {number} ptr
-     * @param {string} type
-     */
-  function getValue(ptr, type = 'i8') {
-      if (type.endsWith('*')) type = 'i32';
+    /** @param {number} ptr
+        @param {string} type
+        @param {number|boolean=} noSafe */
+  function getValue(ptr, type = 'i8', noSafe) {
+      if (type.endsWith('*')) type = 'u32';
       switch (type) {
         case 'i1': return HEAP8[((ptr)>>0)];
         case 'i8': return HEAP8[((ptr)>>0)];
@@ -1774,13 +1773,12 @@ var ASM_CONSTS = {
     }
 
   
-    /**
-     * @param {number} ptr
-     * @param {number} value
-     * @param {string} type
-     */
-  function setValue(ptr, value, type = 'i8') {
-      if (type.endsWith('*')) type = 'i32';
+    /** @param {number} ptr
+        @param {number} value
+        @param {string} type
+        @param {number|boolean=} noSafe */
+  function setValue(ptr, value, type = 'i8', noSafe) {
+      if (type.endsWith('*')) type = 'u32';
       switch (type) {
         case 'i1': HEAP8[((ptr)>>0)] = value; break;
         case 'i8': HEAP8[((ptr)>>0)] = value; break;
@@ -3800,8 +3798,9 @@ var ASM_CONSTS = {
         FS.createStandardStreams();
       },quit:() => {
         FS.init.initialized = false;
-        // force-flush all streams, so we get musl std streams printed out
-        _fflush(0);
+        // Call musl-internal function to close all stdio streams, so nothing is
+        // left in internal buffers.
+        ___stdio_exit();
         // close all of our streams
         for (var i = 0; i < FS.streams.length; i++) {
           var stream = FS.streams[i];
@@ -7052,7 +7051,7 @@ var ___getTypeName = Module["___getTypeName"] = createExportWrapper("__getTypeNa
 var ___embind_register_native_and_builtin_types = Module["___embind_register_native_and_builtin_types"] = createExportWrapper("__embind_register_native_and_builtin_types");
 
 /** @type {function(...*):?} */
-var _fflush = Module["_fflush"] = createExportWrapper("fflush");
+var ___stdio_exit = Module["___stdio_exit"] = createExportWrapper("__stdio_exit");
 
 /** @type {function(...*):?} */
 var _free = Module["_free"] = createExportWrapper("free");
@@ -7252,6 +7251,39 @@ function invoke_vii(index,a1,a2) {
   }
 }
 
+function invoke_vid(index,a1,a2) {
+  var sp = stackSave();
+  try {
+    getWasmTableEntry(index)(a1,a2);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_iiiiii(index,a1,a2,a3,a4,a5) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1,a2,a3,a4,a5);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
+function invoke_id(index,a1) {
+  var sp = stackSave();
+  try {
+    return getWasmTableEntry(index)(a1);
+  } catch(e) {
+    stackRestore(sp);
+    if (e !== e+0) throw e;
+    _setThrew(1, 0);
+  }
+}
+
 function invoke_d(index) {
   var sp = stackSave();
   try {
@@ -7296,32 +7328,10 @@ function invoke_viiiiii(index,a1,a2,a3,a4,a5,a6) {
   }
 }
 
-function invoke_id(index,a1) {
-  var sp = stackSave();
-  try {
-    return getWasmTableEntry(index)(a1);
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
 function invoke_viiidd(index,a1,a2,a3,a4,a5) {
   var sp = stackSave();
   try {
     getWasmTableEntry(index)(a1,a2,a3,a4,a5);
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_vid(index,a1,a2) {
-  var sp = stackSave();
-  try {
-    getWasmTableEntry(index)(a1,a2);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7355,17 +7365,6 @@ function invoke_dii(index,a1,a2) {
   var sp = stackSave();
   try {
     return getWasmTableEntry(index)(a1,a2);
-  } catch(e) {
-    stackRestore(sp);
-    if (e !== e+0) throw e;
-    _setThrew(1, 0);
-  }
-}
-
-function invoke_iiiiii(index,a1,a2,a3,a4,a5) {
-  var sp = stackSave();
-  try {
-    return getWasmTableEntry(index)(a1,a2,a3,a4,a5);
   } catch(e) {
     stackRestore(sp);
     if (e !== e+0) throw e;
@@ -7735,7 +7734,7 @@ unexportedRuntimeFunction('exceptionCaught', false);
 unexportedRuntimeFunction('ExceptionInfo', false);
 unexportedRuntimeFunction('exception_addRef', false);
 unexportedRuntimeFunction('exception_decRef', false);
-unexportedRuntimeFunction('getExceptionMessage', false);
+unexportedRuntimeFunction('formatException', false);
 unexportedRuntimeFunction('Browser', false);
 unexportedRuntimeFunction('setMainLoop', false);
 unexportedRuntimeFunction('wget', false);
@@ -8003,7 +8002,7 @@ function checkUnflushedContent() {
     has = true;
   }
   try { // it doesn't matter if it fails
-    _fflush(0);
+    ___stdio_exit();
     // also flush in the JS FS layer
     ['stdout', 'stderr'].forEach(function(name) {
       var info = FS.analyzePath('/dev/' + name);
