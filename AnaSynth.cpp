@@ -1503,6 +1503,7 @@ void RenderSidebar()
     {
       static std::vector<double> previousFreqs;
       std::vector<double>freqs = {frequencyMap.at(document.call<emscripten::val>("getElementById", emscripten::val("s1"))["value"].as<std::string>())};
+      freqs.emplace_back(frequencyMap.at(document.call<emscripten::val>("getElementById", emscripten::val("s2"))["value"].as<std::string>()));
       if (previousFreqs != freqs)
       {
         audio::set_vars(freqs, 0.5, 1.5);
