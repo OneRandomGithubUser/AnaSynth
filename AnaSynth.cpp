@@ -1167,7 +1167,7 @@ void RenderCanvas()
       break;
     }
     case 8: {
-      DrawFullCircuit(ctx, false, true, false, false);
+      DrawFullCircuit(ctx, true, false, false, false);
       break;
     }
     case 9:
@@ -1775,6 +1775,7 @@ void InitializePage(int i)
     }
     case(11) :
     {
+      addParagraph(info, "Using the notes you have created and the sawtooth wave that you have generated, you can now play your very own tunes on this piano!");
       emscripten::val sel = document.call<emscripten::val>("createElement", emscripten::val("select"));
       sel.set("id", "wave");
       sel.set("name", "wave");
@@ -1785,7 +1786,7 @@ void InitializePage(int i)
       sel.call<void>("appendChild", sine);
       emscripten::val saw = document.call<emscripten::val>("createElement", emscripten::val("option"));
       saw.set("value", "saw");
-      saw.set("innerHTML", "Saw");
+      saw.set("innerHTML", "Sawtooth");
       sel.call<void>("appendChild", saw);
 
       for(int i = 0; i < 13; i++) {
