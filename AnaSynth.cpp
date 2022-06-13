@@ -29,7 +29,7 @@ static int page;
 bool circuitCompleted = false;
 boost::uuids::random_generator uuidGenerator;
 std::vector<boost::uuids::uuid> uuids;
-static double resistance = 4, efficiency = 86.5, inductance = -1, capacitance = -1, frequency = -1, initialVolume = -1, timeConstant = -1, watts = -1, volts = -1;
+static double resistance = 4, efficiency = 86.5, inductance = -1, capacitance = -1, frequency = -1, initialVolume = -1, timeConstant = -1, watts = -1, volts = -1, decibels = -1;
 static bool playButtonEnabled = false;
 static bool nextButtonEnabled = false;
 
@@ -1325,8 +1325,18 @@ void InitializePage(int i)
       emscripten::val lValue = addInputField("lValue", false, 0.1, 0);
       emscripten::val rValue = addInputField("rValue", true, 0.1, 0);
       emscripten::val tValue = addInputField("tValue", true, 0.1, 0);
-      
-      lValue.set("value", inductance);
+      if (inductance != -1)
+      {
+        lValue.set("value", emscripten::val(inductance));
+      }
+      if (resistance != -1)
+      {
+        rValue.set("value", emscripten::val(resistance));
+      }
+      if (timeConstant != -1)
+      {
+        tValue.set("value", emscripten::val(timeConstant));
+      }
 
       addParagraph(info, "The time constant, &#120591, of this system is given by the equation");
       addBigParagraph(info, "&#120591 = 2L/R");
@@ -1376,9 +1386,18 @@ void InitializePage(int i)
       emscripten::val cValue = addInputField("cValue", false, 0.1, 0);
       emscripten::val lValue = addInputField("lValue", true, 0.1, 0);
       emscripten::val fValue = addInputField("fValue", true, 0.1, 0);
-
-      lValue.set("value", emscripten::val(inductance));
-      cValue.set("value", emscripten::val(capacitance));
+      if (capacitance != -1)
+      {
+        cValue.set("value", emscripten::val(capacitance));
+      }
+      if (inductance != -1)
+      {
+        lValue.set("value", emscripten::val(inductance));
+      }
+      if (frequency != -1)
+      {
+        fValue.set("value", emscripten::val(frequency));
+      }
 
       addLabel(info, "cValue", "C = ", "left-label");
       info.call<emscripten::val>("appendChild", cValue);
@@ -1427,10 +1446,26 @@ void InitializePage(int i)
       emscripten::val vValue = addInputField("vValue", false, 0.1, 0);
       emscripten::val pValue = addInputField("pValue", true, 0.1, 0);
       emscripten::val lpValue = addInputField("lpValue", true, 0.1, 0);
-      
-      lValue.set("value", inductance);
-      cValue.set("value", capacitance);
-      vValue.set("value", volts);
+      if (capacitance != -1)
+      {
+        cValue.set("value", emscripten::val(capacitance));
+      }
+      if (inductance != -1)
+      {
+        lValue.set("value", emscripten::val(inductance));
+      }
+      if (volts != -1)
+      {
+        vValue.set("value", emscripten::val(volts));
+      }
+      if (watts != -1)
+      {
+        pValue.set("value", emscripten::val(watts));
+      }
+      if (decibels != -1)
+      {
+        lpValue.set("value", emscripten::val(decibels));
+      }
 
       addParagraph(info, "Adjust your voltage to control the volume. We assume the speaker is 0.5% efficient (audiophiles beware!). dB are being read at 0.55m from the source, because who sits a whole meter away from their speakers? Power is given by");
       addBigParagraph(info, "P = I<sup>2</sup>R = CV<sup>2</sup>/L");
@@ -1473,11 +1508,12 @@ void InitializePage(int i)
       std::string veryEfficient = std::to_string(audio::decibels_to_watts(95, 1) * 100) + "%";
       std::string average = std::to_string(audio::decibels_to_watts(88, 1) * 100) + "%";
       std::string veryInefficient = std::to_string(audio::decibels_to_watts(83, 1) * 100) + "%";
-      emscripten::val rValue = addInputField("rValue", false, 2, 0, 16, 6);
-      emscripten::val efficiencyValue = addInputField("efficiencyValue", true, 0.01);
-      emscripten::val sensitivityValue = addInputField("sensitivityValue", false, 0.1, 0, 109.453876, 88);
 
-      rValue.set("value", resistance);
+      emscripten::val rValue = addInputField("rValue", false, 2, 0, 16, 6);
+      emscripten::val sensitivityValue = addInputField("sensitivityValue", false, 0.1, 0, 109.453876, 88);
+      emscripten::val efficiencyValue = addInputField("efficiencyValue", true, 0.01);
+      rValue.set("value", emscripten::val(resistance));
+      sensitivityValue.set("value", emscripten::val(efficiency));
 
       addParagraph(info, "Now, we give you the freedom to manipulate the statistics of the speaker.");
       addParagraph(info, "The resistance of the speaker, which would be called the speaker impedance in an AC circuit, controls the time constant and the initial sound volume. Since it changes two key values rather than just one, we have restricted changing its value until now.");
@@ -1616,7 +1652,7 @@ void RenderSidebar()
       emscripten::val resistor = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val tConstant = document.call<emscripten::val>("getElementById", emscripten::val("tValue"));
       double tV = 0;
-      resistor.set("value", emscripten::val(4));
+      resistor.set("value", emscripten::val(resistance));
       if (inductor["value"].as<std::string>() != "" && resistor["value"].as<std::string>() != "") {
         tV = 2 * stod(inductor["value"].as<std::string>()) / stod(resistor["value"].as<std::string>());
         if (std::isinf(tV)) {
@@ -1624,7 +1660,6 @@ void RenderSidebar()
         } else {
           tConstant.set("value", emscripten::val(tV));
         }
-        inductance = stod(inductor["value"].as<std::string>());
       }
 
       emscripten::val sidebar = document.call<emscripten::val>("getElementById", emscripten::val("sidebar"));
@@ -1659,6 +1694,7 @@ void RenderSidebar()
             std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults = {{uuid, std::make_tuple(frequency, initialVolume, timeConstant)}};
             audio::add_rlcs(defaults);
           }
+          inductance = stod(inductor["value"].as<std::string>());
           timeConstant = tV;
           StoreData(page);
         }
@@ -1679,8 +1715,8 @@ void RenderSidebar()
           fr.set("value", emscripten::val("Infinity"));
         } else {
           fr.set("value", emscripten::val(f));
-          capacitance = stod(capacitor["value"].as<std::string>());
           if (frequency != f) {
+            capacitance = stod(capacitor["value"].as<std::string>());
             frequency = f;
             if (audio::get_playing()) {
               PlayOrPauseSound(emscripten::val(""));
