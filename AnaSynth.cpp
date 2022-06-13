@@ -17,7 +17,7 @@ const double pi = std::numbers::pi;
 const double e = std::numbers::e;
 static int page;
 bool circuitCompleted = false;
-static double inductance, capacitance;
+static double inductance, capacitance, frequency, watts;
 
 static const std::map<std::string, double> frequencyMap = {
   {"C4", 261.63},
@@ -1309,7 +1309,7 @@ void InitializePage(int i)
       cValue.set("value", capacitance);
 
       addBigParagraph(info, "P = I<sup>2</sup>R = CV<sup>2</sup>/L");
-      addParagraph(info, "Adjust your voltage to control the volume. dB are being read at 0.55m from the source.");
+      addParagraph(info, "Adjust your voltage to control the volume. dB are being read at 0.55m from the source, because who sits a whole meter away from their speakers?");
       addLabel(info, "lValue", "L = ", "left-label");
       info.call<emscripten::val>("appendChild", lValue);
       addLabel(info, "lValue", "H");
@@ -1516,8 +1516,9 @@ void RenderSidebar()
           fr.set("value", emscripten::val("Infinity"));
         } else {
           fr.set("value", emscripten::val(f));
+          capacitance = stod(capacitor["value"].as<std::string>());
+          frequency = f;
         }
-        capacitance = stod(capacitor["value"].as<std::string>());
       }
 
 
@@ -1534,23 +1535,42 @@ void RenderSidebar()
       emscripten::val volume = document.call<emscripten::val>("getElementById", emscripten::val("lpValue"));
       double p;
       if (voltage["value"].as<std::string>() != "") {
-        p = capacitance * stod(voltage["value"].as<std::string>()) * stod(voltage["value"].as<std::string>()) / inductance;
+        p = 0.5* capacitance * stod(voltage["value"].as<std::string>()) * stod(voltage["value"].as<std::string>()) / inductance;
         if (std::isinf(p)) {
           power.set("value", emscripten::val("Infinity"));
           volume.set("value", emscripten::val("Infinity"));
         } else {
           power.set("value", emscripten::val(p));
           volume.set("value", emscripten::val(audio::watts_to_decibels(p / 1000000, 0.55)));
+          watts = p;
         }
       }
       break;
     }
     case 7:
     {
+      emscripten::val resistance = document.call<emscripten::val>("getElementById", emscripten::val("rValue"));
       emscripten::val sensitivity = document.call<emscripten::val>("getElementById", emscripten::val("sensitivityValue"));
       emscripten::val efficiency = document.call<emscripten::val>("getElementById", emscripten::val("efficiencyValue"));
-      double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
-      efficiency.set("value", emscripten::val(efficiencyValue*100));
+
+      if(resistance["value"].as<std::string>() != "" && sensitivity["value"].as<std::string>() != "") {
+        double efficiencyValue = audio::decibels_to_watts(stod(sensitivity["value"].as<std::string>()), 1);
+        efficiency.set("value", emscripten::val(efficiencyValue*100));
+        double r = stod(resistance["value"].as<std::string>());
+        double t = 2 * inductance / r;
+        std::vector<double> f = {frequency};
+        std::cout << f << std::endl;
+        
+        static std::vector<double> previousVars;
+        std::vector<double> vars = {r, t};
+        if(previousVars != vars) {
+          audio::set_vars(f, watts/4 * r, t);
+          previousVars = vars;
+        }
+      }
+
+      
+      
       double initialVolume = -1;
       if (false) {
         audio::set_initial_volume(initialVolume);
