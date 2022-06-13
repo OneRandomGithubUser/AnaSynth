@@ -320,7 +320,7 @@ namespace audio
     double temp = 0.0;
     for (auto& [uuid, volumeManager] : volumeManagers)
     {
-      temp += get_current_volume(uuid) * sin(2*pi*frequencies.at(uuid)*(audioContext.value()["currentTime"].as<double>() - beginTimes.at(uuid)))/100;
+      temp += get_current_volume(uuid) * sin((2*pi*frequencies.at(uuid)*audioContext.value()["currentTime"].as<double>() - beginTimes.at(uuid))/100);
     }
     return temp;
   }
@@ -1620,7 +1620,7 @@ void InitializePage(int i)
       } else {
         disablePlayButton();
       }
-      enableNextButton();
+      disableNextButton();
       break;
     }
     case (7): {
@@ -1660,7 +1660,6 @@ void InitializePage(int i)
       addLabel(info, "efficiencyValue", "∴ ŋ = ", "left-label");
       info.call<emscripten::val>("appendChild", efficiencyValue);
       addLabel(info, "efficiencyValue", "% efficiency");
-      disablePlayButton("Please lower the volume.");
       enablePlayButton();
       enableNextButton();
       break;
@@ -1759,6 +1758,7 @@ void InitializePage(int i)
       break;
     case (10):
     {
+      addParagraph(info, "With harmonics, we can use Fourier transforms to create more complex waveforms. For example, we can combine 10 RLC circuits to create a 10th order approximation of a sawtooth wave. Try changing the sawtooth wave's frequency!");
       emscripten::val fValue = addInputField("fValue", false, 0.1, 0);
 
       addLabel(info, "fValue", "f = ", "left-label");
@@ -1878,13 +1878,13 @@ void RenderSidebar()
           power.set("value", emscripten::val("Infinity"));
           volume.set("value", emscripten::val("Infinity"));
         } else {
+          power.set("value", emscripten::val(p));
+          volume.set("value", emscripten::val(
+                  audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55)));
           if (watts != p && audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55) > 30 && audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55) < 70) {
             if (audio::get_playing()) {
               PlayOrPauseSound(emscripten::val(""));
             }
-            power.set("value", emscripten::val(p));
-            volume.set("value", emscripten::val(
-                    audio::watts_to_decibels(audio::decibels_to_watts(efficiency, 1) * p / 1000000, 0.55)));
             watts = p;
             initialVolume = p * audio::decibels_to_watts(efficiency, 1);
             volts = stod(voltage["value"].as<std::string>());
@@ -1892,6 +1892,7 @@ void RenderSidebar()
             std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults{{uuidGenerator(), std::make_tuple(frequency, initialVolume, timeConstant)}};
             audio::add_rlcs(defaults);
             StoreData(page);
+            enableNextButton();
           }
         }
       }
@@ -1914,10 +1915,10 @@ void RenderSidebar()
         resistance = r;
         
         // std::cout << std::to_string(watts/4 * r) << std::endl;
-        if(playButtonEnabled && watts/4 * r > 1) {
+        if(playButtonEnabled && audio::decibels_to_watts(efficiency, 1) * watts / 1000000 > 1) {
           disablePlayButton("Please lower the volume.");
           playButtonEnabled = false;
-        } else if (!playButtonEnabled && watts/4 * r <= 1){
+        } else if (!playButtonEnabled && audio::decibels_to_watts(efficiency, 1) * watts / 1000000 <= 1){
           enablePlayButton(true);
           playButtonEnabled = true;
         }
@@ -1937,6 +1938,7 @@ void RenderSidebar()
           StoreData(page);
         }
       }
+      circuitCompleted = true;
       break;
     }
     case 8:
@@ -1998,8 +2000,18 @@ void RenderSidebar()
         {
           std::vector<double>freqs = {f};
           //audio::set_vars(freqs, watts/4 * resistance, 2*inductance/resistance);
-          // TODO: set vars
+          if (audio::get_playing()) {
+            PlayOrPauseSound(emscripten::val(""));
+          }
+          audio::remove_all_rlcs();
+          std::unordered_map<boost::uuids::uuid, std::tuple<double, double, double>, boost::hash<boost::uuids::uuid>> defaults;
+          for (auto freq : freqs) {
+            boost::uuids::uuid uuid = uuidGenerator();
+            defaults.try_emplace(uuid, std::make_tuple(freq, watts/4 * resistance, 2*inductance/resistance));
+          }
+          audio::add_rlcs(defaults);
           previousVars = vars;
+          StoreData(page);
         }
 
       
