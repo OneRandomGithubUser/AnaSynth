@@ -2260,7 +2260,7 @@ void RetrieveData()
 void CloseIntro(emscripten::val event) {
   document.call<emscripten::val>("getElementById", emscripten::val("blur")).call<void>("remove", emscripten::val("mouseup"));
   audio::initialize();
-  RetrieveData();
+  // RetrieveData();
   StoreData(page);
 }
 
